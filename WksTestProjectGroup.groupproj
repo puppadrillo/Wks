@@ -1,0 +1,60 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{367CB7E6-475E-4546-B629-198132180DA7}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="WksTestConsoleProject.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="WksTestIsapiProject.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="WksWsstUtilProject.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="WksTestConsoleProject">
+        <MSBuild Projects="WksTestConsoleProject.dproj"/>
+    </Target>
+    <Target Name="WksTestConsoleProject:Clean">
+        <MSBuild Projects="WksTestConsoleProject.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="WksTestConsoleProject:Make">
+        <MSBuild Projects="WksTestConsoleProject.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="WksTestIsapiProject">
+        <MSBuild Projects="WksTestIsapiProject.dproj"/>
+    </Target>
+    <Target Name="WksTestIsapiProject:Clean">
+        <MSBuild Projects="WksTestIsapiProject.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="WksTestIsapiProject:Make">
+        <MSBuild Projects="WksTestIsapiProject.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="WksWsstUtilProject">
+        <MSBuild Projects="WksWsstUtilProject.dproj"/>
+    </Target>
+    <Target Name="WksWsstUtilProject:Clean">
+        <MSBuild Projects="WksWsstUtilProject.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="WksWsstUtilProject:Make">
+        <MSBuild Projects="WksWsstUtilProject.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="WksTestConsoleProject;WksTestIsapiProject;WksWsstUtilProject"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="WksTestConsoleProject:Clean;WksTestIsapiProject:Clean;WksWsstUtilProject:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="WksTestConsoleProject:Make;WksTestIsapiProject:Make;WksWsstUtilProject:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>

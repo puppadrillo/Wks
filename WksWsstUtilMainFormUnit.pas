@@ -14,7 +14,6 @@ uses
 type
   TMainForm = class(TForm)
     TopPanel: TPanel;
-    WebsiteEdit: TEdit;
     UrlLabel: TLabel;
     GoButton: TButton;
     LogMemo: TMemo;
@@ -25,6 +24,7 @@ type
     ResultLabel: TLabel;
     ClearButton: TButton;
     LogCheckBox: TCheckBox;
+    UrlComboBox: TComboBox;
     procedure FormCreate(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure GoButtonClick(Sender: TObject);
@@ -277,18 +277,20 @@ begin
   // init
   Caption := 'WKS Web Site Strees Test';
   LogMemo.Clear;
+  UrlComboBox.Items.Add('http://localhost/WksTestIsapiProject.dll');
+  UrlComboBox.Items.Add('http://localhost/WksIsapiProject.dll');
 
   // ini
   f := ChangeFileExt(Application.ExeName, '.ini');
   FIni := TIniFile.Create(f);
-  WebsiteEdit.Text                := FIni.ReadString('Option', 'Website'        , 'http://localhost/WksTestIsapiProject.dll');
+  UrlComboBox.Text                := FIni.ReadString('Option', 'Website'        , 'http://localhost/WksTestIsapiProject.dll');
   RepeatEdit.Text                 := FIni.ReadString('Option', 'Repeat'         , '10');
   LogActivityOnlyCheckBox.Checked := FIni.ReadBool  ('Option', 'LogActivityOnly', true);
 end;
 
 procedure TMainForm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
-  FIni.WriteString('Option', 'Website'        , WebsiteEdit.Text);
+  FIni.WriteString('Option', 'Website'        , UrlComboBox.Text);
   FIni.WriteString('Option', 'Repeat'         , RepeatEdit.Text);
   FIni.WriteBool  ('Option', 'LogActivityOnly', LogActivityOnlyCheckBox.Checked);
   FIni.Free;
@@ -305,10 +307,10 @@ procedure TMainForm.GoButtonClick(Sender: TObject);
 var
   r: string;
 begin
-//r := UrlContentGetWinInet(WebsiteEdit.Text);
-//r := UrlContentGetIndy(WebsiteEdit.Text);
-//r := UrlContentGetDelphi(WebsiteEdit.Text);
-  r := UrlContentGetWinHttp(WebsiteEdit.Text);
+//r := UrlContentGetWinInet(UrlComboBox.Text);
+//r := UrlContentGetIndy(UrlComboBox.Text);
+//r := UrlContentGetDelphi(UrlComboBox.Text);
+  r := UrlContentGetWinHttp(UrlComboBox.Text);
   if ClearAtStartCheckBox.Checked then
     LogMemo.Clear;
   LogMemo.Lines.Add(r);
@@ -330,7 +332,7 @@ begin
   FWatch.Start;
   Screen.Cursor := crHourGlass;
   for i := 0 to StrToIntDef(RepeatEdit.Text, 1) - 1 do
-    THTTPRequestThread.Create(WebsiteEdit.Text, LogActivityOnlyCheckBox.Checked);
+    THTTPRequestThread.Create(UrlComboBox.Text, LogActivityOnlyCheckBox.Checked);
 end;
 {$ENDREGION}
 

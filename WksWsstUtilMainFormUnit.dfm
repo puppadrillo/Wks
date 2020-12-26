@@ -50,21 +50,13 @@ object MainForm: TMainForm
       Layout = tlCenter
       ExplicitHeight = 16
     end
-    object WebsiteEdit: TEdit
-      Left = 38
-      Top = 10
-      Width = 217
-      Height = 21
-      TabOrder = 0
-      Text = 'WebsiteEdit'
-    end
     object GoButton: TButton
       Left = 261
       Top = 8
       Width = 42
       Height = 25
       Caption = 'Go'
-      TabOrder = 1
+      TabOrder = 0
       OnClick = GoButtonClick
     end
     object GoThreadButton: TButton
@@ -73,7 +65,7 @@ object MainForm: TMainForm
       Width = 41
       Height = 25
       Caption = 'Start'
-      TabOrder = 2
+      TabOrder = 1
       OnClick = GoThreadButtonClick
     end
     object RepeatEdit: TEdit
@@ -81,7 +73,7 @@ object MainForm: TMainForm
       Top = 10
       Width = 38
       Height = 21
-      TabOrder = 3
+      TabOrder = 2
       Text = 'RepeatEdit'
     end
     object ClearAtStartCheckBox: TCheckBox
@@ -92,7 +84,7 @@ object MainForm: TMainForm
       Caption = 'Clear at start'
       Checked = True
       State = cbChecked
-      TabOrder = 4
+      TabOrder = 3
     end
     object LogActivityOnlyCheckBox: TCheckBox
       Left = 583
@@ -100,7 +92,7 @@ object MainForm: TMainForm
       Width = 98
       Height = 17
       Caption = 'Log activity only'
-      TabOrder = 5
+      TabOrder = 4
     end
     object ClearButton: TButton
       AlignWithMargins = True
@@ -113,7 +105,7 @@ object MainForm: TMainForm
       Margins.Bottom = 7
       Align = alRight
       Caption = 'Clear'
-      TabOrder = 6
+      TabOrder = 5
       OnClick = ClearButtonClick
     end
     object LogCheckBox: TCheckBox
@@ -124,7 +116,15 @@ object MainForm: TMainForm
       Caption = 'Log'
       Checked = True
       State = cbChecked
+      TabOrder = 6
+    end
+    object UrlComboBox: TComboBox
+      Left = 38
+      Top = 10
+      Width = 217
+      Height = 21
       TabOrder = 7
+      Text = 'UrlComboBox'
     end
   end
   object LogMemo: TMemo

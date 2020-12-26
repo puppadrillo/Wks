@@ -23,6 +23,7 @@ How to run a project?
 actually noving to GitHub.
 
 ## WKS Test Projects
-- WksTestConsoleProject (test console application)
-- WksTestIsapiProject   (test isapi empty application used to develop WksAllUnit.pas and for web site stress tests)
-- WksWsstUtilProject    (web site stress test utility)
+The `WksTestProjectGroup` contains the following projects:
+- **WksTestConsoleProject** (test console application)
+- **WksTestIsapiProject**   (test isapi empty application used to develop WksAllUnit.pas and for web site stress tests)
+- **WksWsstUtilProject**    (web site stress test utility)

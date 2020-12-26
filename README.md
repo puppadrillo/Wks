@@ -14,11 +14,13 @@ Languages and libraries used.
 - MS SQL Server, MongoDb, Redis
 
 ## Setup
+How to prepare the runtime environment?
 
 ## Launch
 How to run a project?
 
 ## Project Status
+actually noving to GitHub.
 
 ## WKS Test Projects
 - WksTestConsoleProject (test console application)

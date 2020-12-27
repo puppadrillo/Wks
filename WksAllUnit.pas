@@ -2974,7 +2974,7 @@ type
   end;
 {$ENDREGION}
 
-{$REGION 'Var'}
+{$REGION 'Vars'}
 var
 //ini: TIniCls;    // ini *** NOT GLOBAL ***
 //log: TLogCls;    // log *** NOT GLOBAL ***
@@ -3043,6 +3043,10 @@ var
   wrs: TWrsRec;    // webresponse
 {$ENDREGION}
 
+{$REGION 'Routines'}
+procedure ods(IvTag, IvText: string);
+{$ENDREGION}
+
 implementation
 
 {$REGION 'Use'}
@@ -3074,6 +3078,15 @@ uses
   , HTTPSend                        // araratsynapse
 //, WksSystemSoapMainServiceIntf
   ;
+{$ENDREGION}
+
+{$REGION 'Routines'}
+procedure ods(IvTag, IvText: string);
+begin
+  {$IFDEF DEBUG}
+  OutputDebugString(PWideChar(byn.Name + ' : ' + IvTag + ' : ' + IvText));
+  {$ENDIF}
+end;
 {$ENDREGION}
 
 {$REGION 'TAllRec'}
@@ -9862,7 +9875,7 @@ begin
   r := IvLogRequest;
 
   // ondebugview ***************************************************************
-  OutputDebugString(PWideChar(r.Entry));
+  ods('LOG', r.Entry);
 
   // onfile ********************************************************************
   try
@@ -9902,6 +9915,7 @@ procedure TLgtCls.Tag(IvTag, IvValue: string; IvType: TLogEntryEnum);
 var
   t, s: string;
 begin
+  {$IFDEF DEBUG}
   case IvType of
     logDebug    : t := 'DEBUG  '; // WKS|MODULE|... ?
     logInfo     : t := 'INFO   ';
@@ -9916,6 +9930,7 @@ begin
 
   s := Format('%s|%5d:%5d|WKS|%7s|%-50s|%s', [FormatDateTime('dd hh:nn:ss zzz', Now), GetCurrentProcessID, GetCurrentThreadID, t, IvTag, IvValue]);
   LogEntryThreadPoolAdd(s);
+  {$ENDIF}
 end;
 
 procedure TLgtCls.TagFmt(IvTag, IvValueFormatString: string; IvVarRecVector: array of TVarRec; IvType: TLogEntryEnum);
@@ -17462,7 +17477,7 @@ end;
 initialization
 
 {$REGION 'Init'}
-OutputDebugString('WKSALLUNIT INIT --== I N I T I A L I Z A T I O N ==--');
+ods('WKSALLUNIT INIT', '--== I N I T I A L I Z A T I O N ==--');
 
 {$REGION 'Help'}
 {
@@ -17477,6 +17492,13 @@ OutputDebugString('WKSALLUNIT INIT --== I N I T I A L I Z A T I O N ==--');
   BUT UNDER HEAVY LOAD, IIS MIGHT INSTANZIATE SEVARAL INSTANCES OF A WEBMODULE IN DIFFERENT THREADS
   THIS CAUSE THE SAME TLogRec, TIniRec / TDbaCls TO BE CALLED IN PARALLEL CAUSING PROBLEMS, AT LEAST IN FIREDAC
   SO THESE OBJECTS MUST BE INSTAZIATED IN THE ONBEFOREDISPATCH AND DESTROIED IN ONAFTERDISPATCH SO EACH THREAD HAS ITS OWN DB CONNECTION OR LOG
+
+  FOR ISAPI DLL
+  Q: in the initialization section of a unit, I create the thread and in the
+     finalization section I would like to free/release/terminate the thread
+
+  A: that is not a good thing to do inside a DLL
+     you should export public functions like TerminateExtension that is callod by IIS just before to unload the dll.
 }
 {$ENDREGION}
 
@@ -17485,13 +17507,13 @@ FormatSettings.DecimalSeparator  := '.';              // or numbers will be 12,1
 FormatSettings.ShortDateFormat   := 'MM/dd/yyyy';     // or mssql will fails
 FormatSettings.ShortTimeFormat   := 'HH:mm:ss AM/PM'; // or mssql will fails
 Application.UpdateFormatSettings := false;            // avoid windows to change back the format setting, to much size increase
-OutputDebugString('WKSALLUNIT INIT FormatSettings applied');
+ods('WKSALLUNIT INIT', 'FormatSettings applied');
 {$ENDREGION}
 
 {$REGION 'Leaks'}
 {$WARN SYMBOL_PLATFORM OFF}
 ReportMemoryLeaksOnShutDown := IsDebuggerPresent();
-OutputDebugString('WKSALLUNIT INIT ReportMemoryLeaksOnShutDown');
+ods('WKSALLUNIT INIT', 'ReportMemoryLeaksOnShutDown');
 {$WARN SYMBOL_PLATFORM ON}
 {$ENDREGION}
 
@@ -17505,7 +17527,7 @@ OutputDebugString('WKSALLUNIT INIT ReportMemoryLeaksOnShutDown');
 
 {$REGION 'wa0'}
 wa0 := TStopwatch.StartNew;
-OutputDebugString('WKSALLUNIT INIT TStopwatch wa0 started');
+ods('WKSALLUNIT INIT', 'TStopwatch wa0 started');
 {$ENDREGION}
 
 {$REGION 'sys'}                                                                 (*
@@ -17530,16 +17552,16 @@ sys.Pop3.Username := ini.StrGet('Pop3/Username', sys.POP3_USERNAME);
 sys.Pop3.Password := ini.StrGet('Pop3/Password', sys.POP3_PASSWORD);
 lg.I('Assigned', 'WKSALLUNIT INIT COMMON SYSTEM POP3');
 
-OutputDebugString('WKSALLUNIT INIT TSysRec sys initialized');                   *)
+ods('WKSALLUNIT INIT', 'TSysRec sys initialized');                   *)
 {$ENDREGION}
 
 {$REGION 'lic'}
-//OutputDebugString('WKSALLUNIT INIT TLicRec lic not implemented');
+//ods('WKSALLUNIT INIT', 'TLicRec lic not implemented');
 {$ENDREGION}
 
 {$REGION 'log'}
 lgt := TLgtCls.Create(); // globalobject
-OutputDebugString('WEBMODULE TThreadFileLog created');
+ods('WKSALLUNIT INIT', 'TThreadFileLog created');
 {$ENDREGION}
 
 {$REGION 'SERVER'}
@@ -17547,25 +17569,25 @@ if byn.IsServer or byn.IsDemon then begin
 
   {$REGION 'com'}
 //CoInitializeEx(nil, COINIT_MULTITHREADED); // use COINIT_APARTMENTTHREADED for opaR
-//OutputDebugString('WKSALLUNIT INIT SERVER COM initialized');
+//ods('WKSALLUNIT INIT SERVER', 'COM initialized');
   {$ENDREGION}
 
   {$REGION 'dba'}
 //db0 := TDbaCls.Create(ini.StrGet('Database/Db0FDCs', ''));
-//OutputDebugString('WKSALLUNIT INIT SERVER TDbaCls db0 created (mssql)'); // db0.FCsFD , db0.FCsADO
+//ods('WKSALLUNIT INIT SERVER', 'TDbaCls db0 created (mssql)'); // db0.FCsFD , db0.FCsADO
 
 //db1 := TDbaCls.Create(ini.StrGet('Database/Db1Cs', ''));
-//OutputDebugString('WKSALLUNIT INIT SERVER TMonCls db1 created (mongo)');
+//ods('WKSALLUNIT INIT SERVER', 'TMonCls db1 created (mongo)');
 
 //db2 := TDbaCls.Create(ini.StrGet('Database/Db2Cs', ''), 'Redis', '???Client');
-//OutputDebugString('WKSALLUNIT INIT SERVER TRedCls db2 created (redis)');
+//ods('WKSALLUNIT INIT SERVER', 'TRedCls db2 created (redis)');
 
 //db3 := TDbaCls.Create(ini.StrGet('Database/Db3Cs', ''), 'Kafka', 'LogClient');
-//OutputDebugString('WKSALLUNIT INIT SERVER TKafCls db2 created (kafka)');
+//ods('WKSALLUNIT INIT SERVER', 'TKafCls db2 created (kafka)');
   {$ENDREGION}
 
   {$REGION 'usr,mbr,org,smt,pop : nologin'}
-//OutputDebugString('WKSALLUNIT INIT SERVER User, member and organization data acquired after a user webrequest (domanin -> organization, login --> user/menber)');
+//ods('WKSALLUNIT INIT SERVER', 'User, member and organization data acquired after a user webrequest (domanin -> organization, login --> user/menber)');
   {$ENDREGION}
 
 end;
@@ -17578,27 +17600,27 @@ if byn.IsClient then begin
   h00 := LoadIcon(HInstance, 'AAA_APPLICATION_BIN_ICON_RC');
   if h00 > 0 then begin
     Application.Icon.Handle := h00; // assign main icon at runtime
-    OutputDebugString('WKSALLUNIT INIT CLIENT icon assigned');
+    ods('WKSALLUNIT INIT CLIENT', 'icon assigned');
   end else
-    OutputDebugString('WKSALLUNIT INIT CLIENT Unable to assign icon');
+    ods('WKSALLUNIT INIT CLIENT', 'Unable to assign icon');
   {$ENDREGION}
 
   {$REGION 'hlp'}
 //Application.HelpFile := ChangeFileExt(Application.ExeName, 'Help.chm');
-//OutputDebugString('WKSALLUNIT INIT CLIENT Help file not implemented');
+//ods('WKSALLUNIT INIT CLIENT', 'Help file not implemented');
   {$ENDREGION}
 
   {$REGION 'com'}
-//OutputDebugString('WKSALLUNIT INIT CLIENT Com not implemented');
+//ods('WKSALLUNIT INIT CLIENT', 'COM not implemented');
   {$ENDREGION}
 
   {$REGION 'dba'}
-//OutputDebugString('WKSALLUNIT INIT CLIENT Dba not implemented');
+//ods('WKSALLUNIT INIT CLIENT', 'DbaCls not implemented');
   {$ENDREGION}
 
   {$REGION 'net'}
 //if not net.InternetIsAvailable(fk) then begin
-//  OutputDebugString('WKSALLUNIT INI Internet is not available, exit');
+//  ods('WKSALLUNIT INIT CLIENT', 'Internet is not available, exit');
 //  raise Exception.Create('Internet is not available, exit');
   //Application.Terminate; // shut down in an orderly fashion
   //System.Halt;           // initiates the abnormal termination of the program
@@ -17613,14 +17635,14 @@ if byn.IsClient then begin
 //  raise Exception.Create(fk);
   //Application.Terminate;
 //end;
-//OutputDebugString('WKSALLUNIT INIT CLIENT User, member and organization data acquired after a succesful login');
+//ods('WKSALLUNIT INIT CLIENT', 'User, member and organization data acquired after a succesful login');
   {$ENDREGION}
 
   {$REGION 'gui'}
 //syn.SynEditSearch      := TSynEditSearch.Create(nil);
 //syn.SynEditRegexSearch := TSynEditRegexSearch.Create(nil);
 //syg.SearchFromCaret    := true;
-//OutputDebugString('WKSALLUNIT INIT Client gui stuff created (syneditsearch)');
+//ods('WKSALLUNIT INIT CLIENT', 'gui stuff created (syneditsearch)');
   {$ENDREGION}
 
 end;
@@ -17631,7 +17653,7 @@ end;
 finalization
 
 {$REGION 'Fine'}
-OutputDebugString('WKSALLUNIT FINE --== F I N A L I Z A T I O N ==--');
+ods('WKSALLUNIT FINE', '--== F I N A L I Z A T I O N ==--');
 
 {$REGION 'CLIENT'}
 if byn.IsClient then begin
@@ -17639,16 +17661,16 @@ if byn.IsClient then begin
   {$REGION 'gui'}
 //FreeAndNil(syn.SynEditSearch);
 //FreeAndNil(syn.SynEditRegexSearch);
-//OutputDebugString('WKSALLUNIT FINE Client gui stuff free (syneditsearch)');
+//ods('WKSALLUNIT FINE CLIENT', 'gui stuff free (syneditsearch)');
   {$ENDREGION}
 
   {$REGION 'usr,mbr,org,smt,pop : logout'}
 //FreeAndNil(org.LogoGraphic);
-//OutputDebugString('WKSALLUNIT FINE CLIENT User, member and organization stuff free');
+//ods('WKSALLUNIT FINE CLIENT', 'User, member and organization stuff free');
 
   // sessionclose
 //ses.RioClose(usr.Organization, usr.Username, fk);
-//OutputDebugString('WKSALLUNIT FINE CLIENT User logout');
+//ods('WKSALLUNIT FINE CLIENT', 'User logout');
   {$ENDREGION}
 
 end;
@@ -17661,37 +17683,37 @@ if byn.IsServer or byn.IsDemon then begin
 //usr.Avatar.Free;
 //mbr.Badge.Free;
 //org.LogoGraphic.Free;
-//OutputDebugString('WKSALLUNIT FINE SERVER User, member and organization stuff free');
+//ods('WKSALLUNIT FINE SERVER', 'User, member and organization stuff free');
   {$ENDREGION}
 
   {$REGION 'dba'}
 //db0.Free; // *** problems freeing the FConnFD ***
-//OutputDebugString('WKSALLUNIT FINE SERVER TDbaCls db0 free (mssql)');
+//ods('WKSALLUNIT FINE SERVER', 'TDbaCls db0 free (mssql)');
   {$ENDREGION}
 
   {$REGION 'com'}
 //CoUninitialize; // non so se e' questo a causare il disaster !!!
-//OutputDebugString('WKSALLUNIT FINE SERVER COM uninitialize');
+//ods('WKSALLUNIT FINE SERVER', 'COM uninitialize');
   {$ENDREGION}
 
 end;
 {$ENDREGION}
 
 {$REGION 'log'}
-//lgt.Free; // cause the iis applicationpool to not recycle properly
-OutputDebugString('WEBMODULE TThreadFileLog NOT free');
+//lgt.Free; // cause the iis applicationpool to not recycle properly, do this in TerminateExtension place
+//ods('WKSALLUNIT FINE', 'TThreadFileLog NOT free here!');
 {$ENDREGION}
 
 {$REGION 'sys'}
 //FreeAndNil(sys.LogoBmp);
-//OutputDebugString('WKSALLUNIT FINE TSysCls logo bitmap free');
+//ods('WKSALLUNIT FINE', 'TSysCls logo bitmap free');
 {$ENDREGION}
 
 {$REGION 'wa0'}
-OutputDebugString(PWideChar('WKSALLUNIT FINE TStopwatch total lifetime ' + wa0.ElapsedMilliseconds.ToString + ' ms'));
+ods('WKSALLUNIT FINE', 'TStopwatch total lifetime ' + wa0.ElapsedMilliseconds.ToString + ' ms');
 {$ENDREGION}
 
-OutputDebugString('WKSALLUNIT FINE --== E N D ==--');
+ods('WKSALLUNIT FINE', '--== E N D ==--');
 {$ENDREGION}
 
 {$REGION 'Zzz'}

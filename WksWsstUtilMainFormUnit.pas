@@ -6,7 +6,8 @@ interface
 uses
     Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
     Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.StdCtrls, System.IniFiles
-  , System.Diagnostics    // watch
+  , System.Diagnostics, VclTee.TeeGDIPlus, VCLTee.TeEngine, VCLTee.TeeProcs,
+  VCLTee.Chart, VCLTee.Series    // watch
   ;
 {$ENDREGION}
 
@@ -20,11 +21,16 @@ type
     GoThreadButton: TButton;
     RepeatEdit: TEdit;
     ClearAtStartCheckBox: TCheckBox;
-    LogActivityOnlyCheckBox: TCheckBox;
+    LogResponseCheckBox: TCheckBox;
     ResultLabel: TLabel;
     ClearButton: TButton;
     LogCheckBox: TCheckBox;
     UrlComboBox: TComboBox;
+    ChartPanel: TPanel;
+    Splitter1: TSplitter;
+    TickChart: TChart;
+    Series1: TPointSeries;
+    WebsiteComboBox: TComboBox;
     procedure FormCreate(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure GoButtonClick(Sender: TObject);
@@ -35,6 +41,8 @@ type
     FIni: TIniFile;
     FCount: integer;
     FWatch: TStopwatch;
+    FTickCountVec: array of integer;
+    function UrlGet: string;
   public
     { Public declarations }
   end;
@@ -69,18 +77,46 @@ const
 type
   THTTPRequestThread = class(TThread) // thread descendant for single request
   private
-    FLogActivityOnly: boolean;
+    FLogResponse: boolean;
+    FTickCount: cardinal;
     FRequestURL: string;
     FResponseText: string;
     procedure Execute; override;
     procedure SynchronizeResult;
   public
-    constructor Create(const IvRequestURL: string; IvLogActivityOnly: boolean = true);
+    constructor Create(const IvRequestURL: string; IvLogResponse: boolean = true);
     destructor Destroy; override;
   end;
 {$ENDREGION}
 
 {$REGION 'Routine'}
+function GetProcessID: Cardinal; register; assembler;
+{$IFDEF 32BIT}
+asm
+  mov eax, FS:[$20]
+end;
+{$ELSE}
+begin
+  Result := Winapi.Windows.GetCurrentProcessId;
+end;
+{$ENDIF}
+
+function GetThreadId: Cardinal; register; assembler;
+{$IFDEF 32BIT}
+asm
+  mov eax, FS:[$24]
+end;
+{$ELSE}
+begin
+  Result := Winapi.Windows.GetCurrentThreadID;
+end;
+{$ENDIF}
+
+function TMainForm.UrlGet: string;
+begin
+  Result := WebsiteComboBox.Text + UrlComboBox.Text;
+end;
+
 function  UrlContentGetWinInet(const IvUrl: string): string;
 var
   NetHandle: HINTERNET;
@@ -203,14 +239,14 @@ end;
 {$ENDREGION}
 
 {$REGION 'THTTPRequestThread'}
-constructor THTTPRequestThread.Create(const IvRequestURL: string; IvLogActivityOnly: boolean);
+constructor THTTPRequestThread.Create(const IvRequestURL: string; IvLogResponse: boolean);
 begin
   // create and start the thread after create
   inherited Create(false);
   // free the thread after THTTPRequest.Execute returns
   FreeOnTerminate := true;
   // store the passed parameters into the fields for future use
-  FLogActivityOnly := IvLogActivityOnly;
+  FLogResponse := IvLogResponse;
   FRequestURL := IvRequestURL;
 end;
 
@@ -223,47 +259,73 @@ end;
 
 procedure THTTPRequestThread.Execute;
 var
-  Request: OleVariant;
+  r: OleVariant; // request
+  t: dword; // tick
 begin
   inherited;
   // COM library initialization for the current thread
   CoInitialize(nil);
   try
     // create the WinHttpRequest object instance
-    Request := CreateOleObject('WinHttp.WinHttpRequest.5.1');
+    r := CreateOleObject('WinHttp.WinHttpRequest.5.1');
     // open HTTP connection with GET method in synchronous mode
-    Request.Open('GET', FRequestURL, False);
+    r.Open('GET', FRequestURL, false);
     // set the User-Agent header value
-    Request.SetRequestHeader('User-Agent', USER_AGENT);
+    r.SetRequestHeader('User-Agent', USER_AGENT);
+
     // sends the HTTP request to the server
-    Request.Send; // this method does not return until WinHTTP completely receives the response (synchronous mode)
-    // store the response into the field for synchronization
-    FResponseText := Request.ResponseText;
+    t := GetTickCount;
+      r.Send; // this method does not return until WinHTTP completely receives the response (synchronous mode)
+    FTickCount := GetTickCount - t;
+
+    // store the response into a field for synchronization
+    FResponseText := r.ResponseText;
     // execute the SynchronizeResult method within the main thread context
     Synchronize(SynchronizeResult);
   finally
     // release the WinHttpRequest object instance
-    Request := Unassigned;
+    r := Unassigned;
     // uninitialize COM library with all resources
     CoUninitialize;
   end;
 end;
 
 procedure THTTPRequestThread.SynchronizeResult;
+var
+  i: Integer;
+  p: TPointSeries;
 begin
   // because of calling this method through Synchronize it is safe to access
   // the VCL controls from the main thread here, so let's fill the memo text
   // with the HTTP response stored before
+  MainForm.FTickCountVec[MainForm.FCount] := FTickCount;
   Inc(MainForm.FCount);
   if MainForm.LogCheckBox.Checked then begin
-    MainForm.LogMemo.Lines.Add(Format('thread %3d', [MainForm.FCount]));
-    if FLogActivityOnly then
-      MainForm.LogMemo.Lines.Add(Self.ThreadID.ToString)
-    else
+    MainForm.LogMemo.Lines.Add(Format('%4d pid:%5d tid:%5d worker:%5d ticks:%5d', [MainForm.FCount, WksWsstUtilMainFormUnit.GetProcessID, WksWsstUtilMainFormUnit.GetThreadId, Self.ThreadID, FTickCount]));
+    if FLogResponse then
       MainForm.LogMemo.Lines.Add(FResponseText);
   end;
+
+  // theend
   if MainForm.FCount = StrToInt(MainForm.RepeatEdit.Text) then begin
+    // logmemo
     MainForm.ResultLabel.Caption := Format('%f s   %f req/s', [MainForm.FWatch.ElapsedMilliseconds / 1000, MainForm.FCount / (MainForm.FWatch.ElapsedMilliseconds / 1000)]);
+    MainForm.LogMemo.Lines.EndUpdate;
+
+    // chart
+    for i := MainForm.TickChart.SeriesCount-1 downto 0 do
+      MainForm.TickChart.Series[i].Free;
+
+    p := TPointSeries.Create(MainForm.TickChart);
+    p.Pointer.Style := psCircle;
+    p.Pointer.Color := clRed;
+    p.Pointer.Size  := 3;
+    MainForm.TickChart.AddSeries(p);
+    for i := Low(MainForm.FTickCountVec) to High(MainForm.FTickCountVec) do
+      MainForm.TickChart.Series[0].AddXY(i, MainForm.FTickCountVec[i]);
+    MainForm.TickChart.Repaint;
+
+    // gui
     Screen.Cursor := crDefault;
   end;
 end;
@@ -277,62 +339,83 @@ begin
   // init
   Caption := 'WKS Web Site Strees Test';
   LogMemo.Clear;
-  UrlComboBox.Items.Add('http://localhost/WksTestIsapiProject.dll');
-  UrlComboBox.Items.Add('http://localhost/WksIsapiProject.dll');
+  WebsiteComboBox.Items.Add('http://localhost');
+  WebsiteComboBox.Items.Add('http://wks.cloud');
+  WebsiteComboBox.Items.Add('http://wks.cloud:8080');
+  UrlComboBox.Items.Add('/WksIsapiProject.dll');
+  UrlComboBox.Items.Add('/WksTestIsapiProject.dll');
 
   // ini
   f := ChangeFileExt(Application.ExeName, '.ini');
   FIni := TIniFile.Create(f);
-  UrlComboBox.Text                := FIni.ReadString('Option', 'Website'        , 'http://localhost/WksTestIsapiProject.dll');
-  RepeatEdit.Text                 := FIni.ReadString('Option', 'Repeat'         , '10');
-  LogActivityOnlyCheckBox.Checked := FIni.ReadBool  ('Option', 'LogActivityOnly', true);
+  WebsiteComboBox.Text        := FIni.ReadString('Option', 'Website'    , 'http://localhost');
+  UrlComboBox.Text            := FIni.ReadString('Option', 'Url'        , '/WksTestIsapiProject.dll');
+  RepeatEdit.Text             := FIni.ReadString('Option', 'Repeat'     , '10');
+  LogResponseCheckBox.Checked := FIni.ReadBool  ('Option', 'LogResponse', true);
 end;
 
 procedure TMainForm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
-  FIni.WriteString('Option', 'Website'        , UrlComboBox.Text);
-  FIni.WriteString('Option', 'Repeat'         , RepeatEdit.Text);
-  FIni.WriteBool  ('Option', 'LogActivityOnly', LogActivityOnlyCheckBox.Checked);
+  FIni.WriteString('Option', 'Website'    , WebsiteComboBox.Text);
+  FIni.WriteString('Option', 'Url'        , UrlComboBox.Text);
+  FIni.WriteString('Option', 'Repeat'     , RepeatEdit.Text);
+  FIni.WriteBool  ('Option', 'LogResponse', LogResponseCheckBox.Checked);
   FIni.Free;
 end;
 {$ENDREGION}
 
 {$REGION 'Action'}
 procedure TMainForm.ClearButtonClick(Sender: TObject);
+var
+  i: integer;
 begin
+  // memo
   LogMemo.Clear;
+
+  // chart
+  for i := MainForm.TickChart.SeriesCount-1 downto 0 do
+    MainForm.TickChart.Series[i].Free;
 end;
 
 procedure TMainForm.GoButtonClick(Sender: TObject);
 var
   r: string;
 begin
-//r := UrlContentGetWinInet(UrlComboBox.Text);
-//r := UrlContentGetIndy(UrlComboBox.Text);
-//r := UrlContentGetDelphi(UrlComboBox.Text);
-  r := UrlContentGetWinHttp(UrlComboBox.Text);
+//r := UrlContentGetWinInet(UrlGet);
+//r := UrlContentGetIndy(UrlGet);
+//r := UrlContentGetDelphi(UrlGet);
+  r := UrlContentGetWinHttp(UrlGet);
   if ClearAtStartCheckBox.Checked then
     LogMemo.Clear;
-  LogMemo.Lines.Add(r);
+  if MainForm.LogCheckBox.Checked then begin
+    MainForm.LogMemo.Lines.Add(Format('pid:%5d tid:%5d', [GetProcessID, GetThreadId]));
+    if LogResponseCheckBox.Checked then
+      MainForm.LogMemo.Lines.Add(r);
+  end;
 end;
 
 procedure TMainForm.GoThreadButtonClick(Sender: TObject);
 var
-  i: integer;
+  z, i: integer;
 begin
   // thread will start (Execute) immediately after creation (createsuspended = false)
   // because the thread will be destroyed immediately after the Execute method finishes
   // (it's because FreeOnTerminate is set to True) and because we are not reading any values from
   // the thread (it fills the memo box with the response for us in SynchronizeResult method) we
   // don't need to store its object instance anywhere as well as we don't need to care about freeing it
-  if ClearAtStartCheckBox.Checked then
+  if ClearAtStartCheckBox.Checked then begin
     LogMemo.Clear;
+    Application.ProcessMessages;
+  end;
   FCount := 0;
+  z := StrToIntDef(RepeatEdit.Text, 1);
   FWatch.Reset;
   FWatch.Start;
   Screen.Cursor := crHourGlass;
-  for i := 0 to StrToIntDef(RepeatEdit.Text, 1) - 1 do
-    THTTPRequestThread.Create(UrlComboBox.Text, LogActivityOnlyCheckBox.Checked);
+  LogMemo.Lines.BeginUpdate;
+  SetLength(FTickCountVec, z);
+  for i := 0 to z - 1 do
+    THTTPRequestThread.Create(UrlGet, LogResponseCheckBox.Checked);
 end;
 {$ENDREGION}
 

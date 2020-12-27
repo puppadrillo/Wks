@@ -107,7 +107,7 @@ begin
   FWat.Stop;                    lgt.Tag('WEBMODULE AFTERDISPATCH', 'TStopwatch stopped');
   {$ENDREGION}
 
-  {$REGION 'PrepareAll'}
+  {$REGION 'UnprepareAll'}
   {
     NOW THE APPLICATION SHOULD CLEANUP AND CLOSE NICELY:
     - update cookies
@@ -123,13 +123,31 @@ end;
 
 {$REGION 'Action'}
 procedure TWebModule1.WebModule1DefaultHandlerAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
+var
+  o: boolean;
+  v: variant;
+  s, k: string;
 begin
   lgt.Tag('WEBMODULE', 'DefaultHandlerAction ' + FCount.ToString);
+
+  {$REGION 'Note'}
+  o := FDba.ScalarFD('select ''rnd:'' + convert(varchar, rand())', v, 'default', k);
+  s := Format('result %3d: %s (%s)', [FCount, v, k]);
+  lgt.I(s);
+  {$ENDREGION}
+
+  {$REGION 'Response'}
   Response.Content :=
-    '<html>' +
-    '<head><title>Web Server Application</title></head>' +
-    '<body>Web Server Application</body>' +
-    '</html>';
+    '<html>'
+  + '<head><title>Web Server Application</title></head>'
+  + '<body>'
+  + 'Web Server Application'
+  + ' - ' + DateTimeToStr(Now())
+  + ' - ' + s
+  + '</body>'
+  + '</html>';
+  {$ENDREGION}
+
 end;
 {$ENDREGION}
 

@@ -17,10 +17,10 @@ Languages and libraries used.
 How to prepare the runtime environment?
 
 ## Launch
-How to run a project?
+How to run the project?
 
 ## Project Status
-actually noving to GitHub.
+Actually moving to GitHub.
 
 ## WKS Test Projects
 The `WksTestProjectGroup` contains the following projects:

@@ -63,9 +63,13 @@ end;
 procedure TWebModule1.WebModuleException(Sender: TObject; E: Exception; var Handled: Boolean);
 begin
   lgt.Tag('WEBMODULE EXCEPTION', E.Message);
+
+  Response.Content := htm.HtmlE(FDba, 'Exception', e.Message);
 end;
 
 procedure TWebModule1.WebModuleBeforeDispatch(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
+var
+  k: string;
 begin
   Inc(FCount);
   lgt.Tag('WEBMODULE', 'BeforeDispatch ' + FCount.ToString);
@@ -76,19 +80,24 @@ begin
   FDba := TDbaCls.Create();     lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TDbaCls object created');
   {$ENDREGION}
 
-  {$REGION 'Note'}
+  {$REGION 'PrepareAll'}
   {
-    NOW THE APPLICATION SHOULD KNOW:
+    NOW THE APPLICATION SHOULD KNOW ALL ABOUT THE REQUEST:
     - system, params, switches
     - user, authentication, session
     - organization, palette, smtp, pop3
     - member, email, role, level, structure, authorization
   }
+
+  // prepareall
+//  all.BeforeDispatch(Request, Response, FIni.BooGet('WebRequest/OtpIsActive', false), FIni.BooGet('WebRequest/AuditIsActive', true), k);
   {$ENDREGION}
 
 end;
 
 procedure TWebModule1.WebModuleAfterDispatch(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
+var
+  k: string;
 begin
   lgt.Tag('WEBMODULE', 'AfterDispatch ' + FCount.ToString);
 
@@ -96,6 +105,17 @@ begin
   FDba.Free;                    lgt.Tag('WEBMODULE AFTERDISPATCH', 'TDbaCls object free');
   FIni.Free;                    lgt.Tag('WEBMODULE AFTERDISPATCH', 'TIniCls object free');
   FWat.Stop;                    lgt.Tag('WEBMODULE AFTERDISPATCH', 'TStopwatch stopped');
+  {$ENDREGION}
+
+  {$REGION 'PrepareAll'}
+  {
+    NOW THE APPLICATION SHOULD CLEANUP AND CLOSE NICELY:
+    - update cookies
+    - log audit
+  }
+
+  // finishall
+//  all.AfterDispatch(Request, Response, FIni.BooGet('WebRequest/OtpIsActive', false), FIni.BooGet('WebRequest/AuditIsActive', true), k);
   {$ENDREGION}
 
 end;

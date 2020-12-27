@@ -1,8 +1,11 @@
 unit WksAllUnit;
 
-// TODO
-//
 // - remove : TEMPORARYCOMMENT
+// - remove : PASSWORD
+// - remove : REFERENCES
+// - remove : db0
+// - remove : iarussi giovanni giarussi wks lfmicro engitech
+// - remove : rva.Rv( intermedi
 
 interface
 
@@ -96,6 +99,11 @@ uses
   , FireDAC.Stan.Pool               //
   , FireDAC.UI.Intf                 //
   , FireDAC.VCLUI.Wait              //
+  , superobject                     // json
+  , VirtualTrees                    // virtualstringtree
+  , DTDBTreeView                    // pnodeitem
+//, DTClientTree
+//, XSuperobject                    // json
   , WksThreadUtilsUnit              // tthreadpool
   ;
 {$ENDREGION}
@@ -117,17 +125,18 @@ const
   OK_STR                     = 'OK';
 //FAILED_STR                 = 'FAILED';
 //SUCCESS_STR                = 'SUCCESS';
-//NO_DATA                    = 'No Data';
-//NOT_FOUND                  = 'Not found';
-//NOT_ASSIGNED               = 'Not assigned';
-//NOT_AVAILABLE              = 'Not available';
-//NOT_AUTHORIZED             = 'Not authorized';
-  NOT_IMPLEMENTED            = 'Not implemented';
-//NOT_AN_OPTION              = 'Not an option';
+  NO_DATA_STR                = 'No Data';
+//NOT_FOUND_STR              = 'Not found';
+  NOT_ASSIGNED_STR           = 'Not assigned';
+//NOT_AVAILABLE_STR          = 'Not available';
+//NOT_AUTHORIZED_STR         = 'Not authorized';
+  NOT_IMPLEMENTED_STR        = 'Not implemented';
+//NOT_AN_OPTION_STR          = 'Not an option';
 //FIRST_STR                  = 'First';
 //LAST_STR                   = 'Last';
-//STATE_ACTIVE               = 'Active';
-  KIND_CSV    = ',Bat,Css,Csv,Dws,Etl,Folder,Html,Js,Json,Link,Member,Organization,Param,Pas,Person,Py,R,Root,Sql,Txt'; // *** WARNING, DUPLICATE, INCOMPLETE, REMOVE ***
+//STATE_ACTIVE_STR           = 'Active';
+  KIND_CSV                   = ',Bat,Css,Csv,Dws,Etl,Folder,Html,Js,Json,Link,Member,Organization,Param,Pas,Person,Py,R,Root,Sql,Txt'; // *** WARNING, DUPLICATE, INCOMPLETE, REMOVE ***
+  clWks                      = $BD814F; // wkscolor
   {$ENDREGION}
 
   {$REGION 'Defaults'}
@@ -162,7 +171,8 @@ const
   {$ENDREGION}
 
   {$REGION 'Ini'}
-  INI_CLIENT_DEFAULT =  '[Server]'
+  INI_CLIENT_DEFAULT =
+                 '[Server]'
   + sLineBreak + 'WwwProd=www.wks.cloud'
   + sLineBreak + 'WwwTest=www.wks.cloud:8080'
   + sLineBreak + 'WwwDev=localhost'
@@ -179,9 +189,14 @@ const
   + sLineBreak + 'Username='
   + sLineBreak + 'Password='
   ;
-  INI_SERVER_DEFAULT =  '[Database]'
+  INI_SERVER_DEFAULT =
+                 '[Database]'
 //+ sLineBreak + 'Db0CsADO=Provider=SQLNCLI11.1;Data Source=LOCALHOST;Initial Catalog=DbaClient;User ID=sa;Password=secret;Persist Security Info=True'
   + sLineBreak + 'Db0CsFD=DriverID=Mssql;Server=LOCALHOST;Database=DbaClient;User_Name=sa;Password=secret'
+  + sLineBreak
+  + sLineBreak + '[WebRequest]'
+  + sLineBreak + 'OtpIsActive=0'
+  + sLineBreak + 'AuditIsActive=0'
   ;
   INI_DEMON_DEFAULT =  '[Database]'
 //+ sLineBreak + 'Db0CsADO=Provider=SQLNCLI11.1;Data Source=LOCALHOST;Initial Catalog=DbaClient;User ID=sa;Password=secret;Persist Security Info=True'
@@ -212,7 +227,7 @@ const
   DBA_DEFAULT_RECORD_COUNT   =  50;
   {$ENDREGION}
 
-  {$REGION 'http'}
+  {$REGION 'Http'}
   HTTP_PROTOCOL              = 'http://';
   HTTP_PROTOCOL_SECURE       = 'https://';
 
@@ -306,7 +321,7 @@ const
   ];
   {$ENDREGION}
 
-  {$REGION 'web'}
+  {$REGION 'Web'}
   WEB_COOKIE_EXPIRE_IN_DAY   = 1/24;
   {$ENDREGION}
 
@@ -392,6 +407,15 @@ type
 
 {$REGION 'Types'}
 type
+  TDbaCls = class;
+
+  TAllRec = record // ALL - THIS DO THINGS ALL IN ONE SHOT
+  public
+    function  AllRecordDbaInit(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
+    function  AllRecordRioInit(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
+    function  BeforeDispatch(IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
+    function  AfterDispatch(IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
+  end;
 
   TAskRec = record // yes/no, str, int input dialog
     function  Yes(IvMessage: string = 'Continue ?'): boolean;
@@ -452,6 +476,264 @@ type
     function  CsOracleFD   (IvServer, IvPort, IvSId, IvServiceName, IvDatabase, IvUsername, IvPassword: string; IvDatasource: string = ''): string;
     function  CsOracleDs   (                  IvServer, IvPort, IvSId, IvServiceName: string): string; // datasource without tnsname.ora
     function  CsMongoFD    (IvServer, IvPort, IvDatabase, IvUsername, IvPassword: string; IvCollection: string = ''): string;
+  end;
+
+  TCodRec = record // code *** MOVE TO WksCodeUnit ***
+  const
+    BAT_KIND        = 'Bat'     ;
+    CSS_KIND        = 'Css'     ;
+    CSV_KIND        = 'Csv'     ;
+    DWS_KIND        = 'Dws'     ;
+    ETL_KIND        = 'Etl'     ;
+    ETL_SQL_KIND    = 'EtlSql'  ;
+    ETL_MONGO_KIND  = 'EtlMdb'  ;
+    HTML_KIND       = 'Html'    ;
+    INI_KIND        = 'Ini'     ;
+    ISS_KIND        = 'Iss'     ;
+    JAVA_KIND       = 'Java'    ;
+    JS_KIND         = 'Js'      ;
+    JSON_KIND       = 'Json'    ;
+    PAS_KIND        = 'Pas'     ;
+    PY_KIND         = 'Py'      ;
+    R_KIND          = 'R'       ;
+    SQL_KIND        = 'Sql'     ;
+    TXT_KIND        = 'Txt'     ;
+    XML_KIND        = 'Xml'     ;
+    RETURN_ASSCRIPT = 'AsScript';
+    RETURN_ASCSV    = 'AsCsv'   ;
+    RETURN_ASJSON   = 'AsJson'  ;
+  public
+    function  CsvStr() : string; // Item, BgColor, FgColor
+  //function  JsonStr(): string;
+    function  Vector() : TStringVector;
+    function  DbaCode(IvDba: TDbaCls; IvId: integer; var IvBlocs: integer; var IvType, IvCode, IvFbk: string): boolean;
+    function  RioCode(IvId: integer; var IvBlocs: integer; var IvType, IvCode, IvFbk: string): boolean;
+  end;
+
+  TCoiRec = record // coloritem - for table mapping between html color name and rgb, argb colors
+    Name   : string;
+    RGB    : TColor;
+    ARGB   : TColor;
+  end;
+
+  TColRec = record // color         delphi   html   // integrate this: X:\Application\_\S\ScreenSaver\Demo2\ColorRGB.pas
+  const                         //  B G R    R G B
+    WHITE     = clWhite;        //
+    ORANGE    = clWebOrange;    // $0080FF  #FF8000
+    ORANGERED = clWebOrangeRed; //
+    BLUE      = clBlue;         //
+    GREEN     = clGreen;        //
+    RED       = clRed;          //
+    GRAY      = clGray;         //
+    BLACK     = clBlack;        //
+    CANVASJS  = $AD9E36;        //          #AD9E36
+    PINK      = $4040FF;        //          #FF4040
+    WKS       = clWks;          // $BD814F  #4F81BD
+    HLS_MAX   = 240;
+    TABLE: array[0..151] of TCoiRec = (
+      //     htmlnames                     rrggbb         aarrggbb  ( warning TColor is bbggrr )
+     (Name: 'aliceblue'            ; RGB: $F0F8FF; ARGB: $FFF0F8FF)
+   , (Name: 'antiquewhite'         ; RGB: $FAEBD7; ARGB: $FFFAEBD7)
+   , (Name: 'aqua'                 ; RGB: $00FFFF; ARGB: $FF00FFFF)
+   , (Name: 'aquamarine'           ; RGB: $7FFFD4; ARGB: $FF7FFFD4)
+   , (Name: 'azure'                ; RGB: $F0FFFF; ARGB: $FFF0FFFF)
+   , (Name: 'beige'                ; RGB: $F5F5DC; ARGB: $FFF5F5DC)
+   , (Name: 'bisque'               ; RGB: $FFE4C4; ARGB: $FFFFE4C4)
+   , (Name: 'black'                ; RGB: $000000; ARGB: $FF000000)
+   , (Name: 'blanchedalmond'       ; RGB: $FFFFCD; ARGB: $FFFFEBCD)
+   , (Name: 'blue'                 ; RGB: $0000FF; ARGB: $FF0000FF)
+   , (Name: 'blueviolet'           ; RGB: $8A2BE2; ARGB: $FF8A2BE2)
+   , (Name: 'brown'                ; RGB: $A52A2A; ARGB: $FFA52A2A)
+   , (Name: 'burlywood'            ; RGB: $DEB887; ARGB: $FFDEB887)
+   , (Name: 'cadetblue'            ; RGB: $5F9EA0; ARGB: $FF5F9EA0)
+   , (Name: 'chartreuse'           ; RGB: $7FFF00; ARGB: $FF7FFF00)
+   , (Name: 'chocolate'            ; RGB: $D2691E; ARGB: $FFD2691E)
+   , (Name: 'coral'                ; RGB: $FF7F50; ARGB: $FFFF7F50)
+   , (Name: 'cornflowerblue'       ; RGB: $6495ED; ARGB: $FF6495ED)
+   , (Name: 'cornsilk'             ; RGB: $FFF8DC; ARGB: $FFFFF8DC)
+   , (Name: 'crimson'              ; RGB: $DC143C; ARGB: $FFDC143C)
+   , (Name: 'cyan'                 ; RGB: $00FFFF; ARGB: $FF00FFFF)
+   , (Name: 'darkblue'             ; RGB: $00008B; ARGB: $FF00008B)
+   , (Name: 'darkcyan'             ; RGB: $008B8B; ARGB: $FF008B8B)
+   , (Name: 'darkgoldenrod'        ; RGB: $B8860B; ARGB: $FFB8860B)
+   , (Name: 'darkgray'             ; RGB: $A9A9A9; ARGB: $FFA9A9A9)
+   , (Name: 'darkgreen'            ; RGB: $006400; ARGB: $FF006400)
+   , (Name: 'darkgrey'             ; RGB: $BDB76B; ARGB: $FFA9A9A9)
+   , (Name: 'darkkhaki'            ; RGB: $BDB76B; ARGB: $FFBDB76B)
+   , (Name: 'darkmagenta'          ; RGB: $8B008B; ARGB: $FF8B008B)
+   , (Name: 'darkolivegreen'       ; RGB: $556B2F; ARGB: $FF556B2F)
+   , (Name: 'darkorange'           ; RGB: $FF8C00; ARGB: $FFFF8C00)
+   , (Name: 'darkorchid'           ; RGB: $9932CC; ARGB: $FF9932CC)
+   , (Name: 'darkred'              ; RGB: $8B0000; ARGB: $FF8B0000)
+   , (Name: 'darksalmon'           ; RGB: $E9967A; ARGB: $FFE9967A)
+   , (Name: 'darkseagreen'         ; RGB: $8FBC8F; ARGB: $FF8FBC8F)
+   , (Name: 'darkslateblue'        ; RGB: $483D8B; ARGB: $FF483D8B)
+   , (Name: 'darkslategray'        ; RGB: $2F4F4F; ARGB: $FF2F4F4F)
+   , (Name: 'darkslategrey'        ; RGB: $2F4F4F; ARGB: $FF2F4F4F)
+   , (Name: 'darkturquoise'        ; RGB: $00CED1; ARGB: $FF00CED1)
+   , (Name: 'darkviolet'           ; RGB: $9400D3; ARGB: $FF9400D3)
+   , (Name: 'deeppink'             ; RGB: $FF1493; ARGB: $FFFF1493)
+   , (Name: 'deepskyblue'          ; RGB: $00BFFF; ARGB: $FF00BFFF)
+   , (Name: 'dimgray'              ; RGB: $696969; ARGB: $FF696969)
+   , (Name: 'dimgrey'              ; RGB: $696969; ARGB: $FF696969)
+   , (Name: 'dodgerblue'           ; RGB: $1E90FF; ARGB: $FF1E90FF)
+   , (Name: 'firebrick'            ; RGB: $B22222; ARGB: $FFB22222)
+   , (Name: 'floralwhite'          ; RGB: $FFFAF0; ARGB: $FFFFFAF0)
+   , (Name: 'forestgreen'          ; RGB: $228B22; ARGB: $FF228B22)
+   , (Name: 'fuchsia'              ; RGB: $FF00FF; ARGB: $FFFF00FF)
+   , (Name: 'gainsboro'            ; RGB: $DCDCDC; ARGB: $FFDCDCDC)
+   , (Name: 'ghostwhite'           ; RGB: $F8F8FF; ARGB: $FFF8F8FF)
+   , (Name: 'gold'                 ; RGB: $FFD700; ARGB: $FFFFD700)
+   , (Name: 'goldenrod'            ; RGB: $DAA520; ARGB: $FFDAA520)
+   , (Name: 'gray'                 ; RGB: $808080; ARGB: $FF808080)
+   , (Name: 'grey'                 ; RGB: $808080; ARGB: $FF808080)
+   , (Name: 'green'                ; RGB: $008000; ARGB: $FF008000)
+   , (Name: 'greenyellow'          ; RGB: $ADFF2F; ARGB: $FFADFF2F)
+   , (Name: 'honeydew'             ; RGB: $F0FFF0; ARGB: $FFF0FFF0)
+   , (Name: 'hotpink'              ; RGB: $FF69B4; ARGB: $FFFF69B4)
+   , (Name: 'indianred'            ; RGB: $CD5C5C; ARGB: $FFCD5C5C)
+   , (Name: 'indigo'               ; RGB: $4B0082; ARGB: $FF4B0082)
+   , (Name: 'ivory'                ; RGB: $FFF0F0; ARGB: $FFFFFFF0)
+   , (Name: 'khaki'                ; RGB: $F0E68C; ARGB: $FFF0E68C)
+   , (Name: 'lavender'             ; RGB: $E6E6FA; ARGB: $FFE6E6FA)
+   , (Name: 'lavenderblush'        ; RGB: $FFF0F5; ARGB: $FFFFF0F5)
+   , (Name: 'lawngreen'            ; RGB: $7CFC00; ARGB: $FF7CFC00)
+   , (Name: 'lemonchiffon'         ; RGB: $FFFACD; ARGB: $FFFFFACD)
+   , (Name: 'lightblue'            ; RGB: $ADD8E6; ARGB: $FFADD8E6)
+   , (Name: 'lightcoral'           ; RGB: $F08080; ARGB: $FFF08080)
+   , (Name: 'lightcyan'            ; RGB: $E0FFFF; ARGB: $FFE0FFFF)
+   , (Name: 'lightgoldenrodyellow' ; RGB: $FAFAD2; ARGB: $FFFAFAD2)
+   , (Name: 'lightgreen'           ; RGB: $90EE90; ARGB: $FF90EE90)
+   , (Name: 'lightgray'            ; RGB: $D3D3D3; ARGB: $FFD3D3D3)
+   , (Name: 'lightgrey'            ; RGB: $D3D3D3; ARGB: $FFD3D3D3)
+   , (Name: 'lightpink'            ; RGB: $FFB6C1; ARGB: $FFFFB6C1)
+   , (Name: 'lightsalmon'          ; RGB: $FFA07A; ARGB: $FFFFA07A)
+   , (Name: 'lightseagreen'        ; RGB: $20B2AA; ARGB: $FF20B2AA)
+   , (Name: 'lightskyblue'         ; RGB: $87CEFA; ARGB: $FF87CEFA)
+   , (Name: 'lightslategray'       ; RGB: $778899; ARGB: $FF778899)
+   , (Name: 'lightslategrey'       ; RGB: $778899; ARGB: $FF778899)
+   , (Name: 'lightsteelblue'       ; RGB: $B0C4DE; ARGB: $FFB0C4DE)
+   , (Name: 'lightyellow'          ; RGB: $FFFFE0; ARGB: $FFFFFFE0)
+   , (Name: 'lime'                 ; RGB: $00FF00; ARGB: $FF00FF00)
+   , (Name: 'limegreen'            ; RGB: $32CD32; ARGB: $FF32CD32)
+   , (Name: 'linen'                ; RGB: $FAF0E6; ARGB: $FFFAF0E6)
+   , (Name: 'magenta'              ; RGB: $FF00FF; ARGB: $FFFF00FF)
+   , (Name: 'maroon'               ; RGB: $800000; ARGB: $FF800000)
+   , (Name: 'mediumaquamarine'     ; RGB: $66CDAA; ARGB: $FF66CDAA)
+   , (Name: 'mediumblue'           ; RGB: $0000CD; ARGB: $FF0000CD)
+   , (Name: 'mediumorchid'         ; RGB: $BA55D3; ARGB: $FFBA55D3)
+   , (Name: 'mediumpurple'         ; RGB: $9370DB; ARGB: $FF9370DB)
+   , (Name: 'mediumseagreen'       ; RGB: $3CB371; ARGB: $FF3CB371)
+   , (Name: 'mediumslateblue'      ; RGB: $7B68EE; ARGB: $FF7B68EE)
+   , (Name: 'mediumspringgreen'    ; RGB: $00FA9A; ARGB: $FF00FA9A)
+   , (Name: 'mediumturquoise'      ; RGB: $48D1CC; ARGB: $FF48D1CC)
+   , (Name: 'mediumvioletred'      ; RGB: $C71585; ARGB: $FFC71585)
+   , (Name: 'midnightblue'         ; RGB: $191970; ARGB: $FF191970)
+   , (Name: 'mintcream'            ; RGB: $F5FFFA; ARGB: $FFF5FFFA)
+   , (Name: 'mistyrose'            ; RGB: $FFE4E1; ARGB: $FFFFE4E1)
+   , (Name: 'moccasin'             ; RGB: $FFE4B5; ARGB: $FFFFE4B5)
+   , (Name: 'navajowhite'          ; RGB: $FFDEAD; ARGB: $FFFFDEAD)
+   , (Name: 'navy'                 ; RGB: $000080; ARGB: $FF000080)
+   , (Name: 'null'                 ; RGB: $000000; ARGB: $00000000)
+   , (Name: 'oldlace'              ; RGB: $FDF5E6; ARGB: $FFFDF5E6)
+   , (Name: 'olive'                ; RGB: $808000; ARGB: $FF808000)
+   , (Name: 'olivedrab'            ; RGB: $6B8E23; ARGB: $FF6B8E23)
+   , (Name: 'orange'               ; RGB: $FFA500; ARGB: $FFFFA500)
+   , (Name: 'orangered'            ; RGB: $FF4500; ARGB: $FFFF4500)
+   , (Name: 'orchid'               ; RGB: $DA70D6; ARGB: $FFDA70D6)
+   , (Name: 'palegoldenrod'        ; RGB: $EEE8AA; ARGB: $FFEEE8AA)
+   , (Name: 'palegreen'            ; RGB: $98FB98; ARGB: $FF98FB98)
+   , (Name: 'paleturquoise'        ; RGB: $AFEEEE; ARGB: $FFAFEEEE)
+   , (Name: 'palevioletred'        ; RGB: $DB7093; ARGB: $FFDB7093)
+   , (Name: 'papayawhip'           ; RGB: $FFEFD5; ARGB: $FFFFEFD5)
+   , (Name: 'peachpuff'            ; RGB: $FFDBBD; ARGB: $FFFFDAB9)
+   , (Name: 'peru'                 ; RGB: $CD853F; ARGB: $FFCD853F)
+   , (Name: 'pink'                 ; RGB: $FFC0CB; ARGB: $FFFFC0CB)
+   , (Name: 'plum'                 ; RGB: $DDA0DD; ARGB: $FFDDA0DD)
+   , (Name: 'powderblue'           ; RGB: $B0E0E6; ARGB: $FFB0E0E6)
+   , (Name: 'purple'               ; RGB: $800080; ARGB: $FF800080)
+   , (Name: 'red'                  ; RGB: $FF0000; ARGB: $FFFF0000)
+   , (Name: 'rosybrown'            ; RGB: $BC8F8F; ARGB: $FFBC8F8F)
+   , (Name: 'royalblue'            ; RGB: $4169E1; ARGB: $FF4169E1)
+   , (Name: 'saddlebrown'          ; RGB: $8B4513; ARGB: $FF8B4513)
+   , (Name: 'salmon'               ; RGB: $FA8072; ARGB: $FFFA8072)
+   , (Name: 'sandybrown'           ; RGB: $F4A460; ARGB: $FFF4A460)
+   , (Name: 'seagreen'             ; RGB: $2E8B57; ARGB: $FF2E8B57)
+   , (Name: 'seashell'             ; RGB: $FFF5EE; ARGB: $FFFFF5EE)
+   , (Name: 'sienna'               ; RGB: $A0522D; ARGB: $FFA0522D)
+   , (Name: 'silver'               ; RGB: $C0C0C0; ARGB: $FFC0C0C0)
+   , (Name: 'skyblue'              ; RGB: $87CEEB; ARGB: $FF87CEEB)
+   , (Name: 'slateblue'            ; RGB: $6A5ACD; ARGB: $FF6A5ACD)
+   , (Name: 'slategray'            ; RGB: $708090; ARGB: $FF708090)
+   , (Name: 'slategrey'            ; RGB: $708090; ARGB: $FF708090)
+   , (Name: 'snow'                 ; RGB: $FFFAFA; ARGB: $FFFFFAFA)
+   , (Name: 'springgreen'          ; RGB: $00FF7F; ARGB: $FF00FF7F)
+   , (Name: 'steelblue'            ; RGB: $4682B4; ARGB: $FF4682B4)
+   , (Name: 'tan'                  ; RGB: $D2B48C; ARGB: $FFD2B48C)
+   , (Name: 'teal'                 ; RGB: $008080; ARGB: $FF008080)
+   , (Name: 'thistle'              ; RGB: $D8BFD8; ARGB: $FFD8BFD8)
+   , (Name: 'tomato'               ; RGB: $FD6347; ARGB: $FFFF6347)
+   , (Name: 'transparent'          ; RGB: $000000; ARGB: $00000000)
+   , (Name: 'turquoise'            ; RGB: $40E0D0; ARGB: $FF40E0D0)
+   , (Name: 'violet'               ; RGB: $EE82EE; ARGB: $FFEE82EE)
+   , (Name: 'wheat'                ; RGB: $F5DEB3; ARGB: $FFF5DEB3)
+   , (Name: 'white'                ; RGB: $FFFFFF; ARGB: $FFFFFFFF)
+   , (Name: 'whitesmoke'           ; RGB: $F5F5F5; ARGB: $FFF5F5F5)
+   , (Name: 'yellow'               ; RGB: $FFFF00; ARGB: $FFFFFF00)
+   , (Name: 'yellowgreen'          ; RGB: $9ACD32; ARGB: $FF9ACD32)
+   , (Name: 'yellowmedium'         ; RGB: $FCD901; ARGB: $00FCD901)
+   , (Name: 'yellowneon'           ; RGB: $F5FF12; ARGB: $00F5FF12)
+   , (Name: 'yellowprimrose'       ; RGB: $F5FF12; ARGB: $00F5FF12)
+  );
+  public
+    function  R(IvColor: TColor): byte; overload;
+    function  G(IvColor: TColor): byte; overload;
+    function  B(IvColor: TColor): byte; overload;
+    function  R(IvHColor: string): byte; overload;
+    function  G(IvHColor: string): byte; overload;
+    function  B(IvHColor: string): byte; overload;
+    function  H(IvColor: TColor): double; // hue
+    function  S(IvColor: TColor): double; // saturation
+    function  L(IvColor: TColor): double; // luminosity = luminance = brightness = 0.25*red + 0.625*green + 0.125*blue (simplified formula)
+    function  ToColorRef(IvColor: TColor): TColorRef;
+    procedure ToRGB(const IvColor: TColor; out R, G, B: byte);
+    function  FromRGB(const R, G, B: byte): TColor;
+    procedure ToHSL(const IvColor: TColor; out H, S, L: word);
+    function  FromHSL(const H, S, L: word): TColor;
+    function  ToHtml(IvColor: TColor): string;
+    function  FromHtml(IvHColor: string; IvDefault: TColor = clNone): TColor;
+    function  Invert(IvColor: TColor): TColor;
+    function  Darken(IvColor: TColor; IvPercentage: integer): TColor;
+    function  Lighten(IvColor: TColor; IvPercentage: integer): TColor;
+    function  RGB2BGR(IvRGBColor: TColor): TColor;                                                // RGB -> BGR                   (swap R with B)
+    function  BGR2RGB(IvBGRColor: TColor): TColor;                                                // BGR -> RGB                   (swap B with R)
+    function  RgbToHls(IvRgb: TRGBTriple): THls;
+    function  HlsToRgb(IvHls: THls): TRGBTriple;
+    function  ToStr(IvColor: TColor): string;                                                     // to    clRed                  (turns a TColor to delphi colorname string)
+    function  ToHexStr(IvColor: TColor): string;                                                  // to   '0000FF'                (turns a TColor to hex color string)
+    function  ToHtmlHexStr(IvColor: TColor; IvPrefix: boolean = true): string;                    // to   '#FF0000'               (turns a TColor to HTML hex color string)
+    function  ToHtmlNameStr(IvColor: TColor): string;                                             // to    orangered / '#CF07B9)' (turns a TColor to HTML name/hex color string)
+    function  FromStr(IvString: string): TColor;                                                  // from  cl+delphicolorname     (turns a delphi color string to a delphi TColor)
+    function  FromHexStr(IvHexString: string; IvDefault: string = '808080'): TColor;              // from '0000FF'                (turns an hex string to a delphi TColor)
+    function  FromHtmlHexStr(IvHtmlHexString: string; IvDefault: string = '#808080'): TColor;     // from '#RRGGBB' or 'FF0000'   (turns an HTML hex string to a delphi TColor)
+    function  FromHtmlHexOrNameStr(IvHtmlNameString: string; IvDefault: string = 'gray'): TColor; // from  red      or orangered  (turns an HTML hex/name string to a delphi TColor)
+    function  Blend(IvColor1, IvColor2: TColor; IvBlendingLevel: Byte): TColor;                   // usage  NewColor:= Blend(Color1, Color2, blending level 0 to 100);
+    function  GradeGray (IvGrade: byte): string;
+    function  GradeRed  (IvGrade: byte): string;
+    function  GradeGreen(IvGrade: byte): string;
+    function  GradeBlue (IvGrade: byte): string;
+    procedure WavelengthToRgb(const Wavelength: TNanometer; var R, G, B: byte); // Spectra - Copyright (C) 1998, Earl F. Glynn, Overland Park, KS. -  www.efg2.com/Lab // adapted from www.isc.tamu.edu/~astro/color.html
+    procedure RainbowToRgb(const fraction: double; var R,G,B: byte); // return spectrum colors for range of 0.0 to 1.0
+    function  Rainbow(IvMin, IvMax, IvIdx: double): string; overload;
+    function  Rainbow(MinHue, MaxHue, Hue: integer): TColor; overload;
+    function  Rainbow(Hue: double): TColor; overload;
+    function  ColorRnd: TColor;
+    function  ColorFineRnd(IvStart: byte = 127): TColor; // for red, green and blue byte, select $00, $33, $66, $99, $cc or $ff or rather: random(6) * $33 so the resulting 216 possible combinations will not look dark
+    function  ColorNameRnd: string;
+    function  ColorHtmlRnd: string;
+    function  ColorAggRnd(IvStart: byte = 127; IvAlpha: string = '40'): string; // return rrggbbaa suitable for aggpas
+    function  ColorHexRnd: string;
+    function  ColorHexaRnd: string;
   end;
 
   TConRec = record // connection
@@ -638,6 +920,39 @@ type
     function  Field(IvDotOrDbaTblFld: string): string;                           // field    : FldName
   end;
 
+  TDstRec = record // dataset
+  public
+    procedure Filter(IvDs: TDataSet; IvFilter: string; IvFieldToSearchCsv: string; IvActive: boolean = true; IvAdditionalExplicitFilter: string = '');
+    procedure FilterList(IvDs: TDataSet; IvFilter: string; IvFieldToSearchCsv, IvFieldToShowInList: string; IvStringList: TStrings);
+
+    function  FieldCreate(IvDs: TDataSet; IvFieldType: TFieldType; const IvFld: string = ''; IvSize: integer = 0; IvDisplayWidth: integer = 255): TField; overload;
+    function  DataSetFieldCreate(IvDs: TDataSet; const IvFld: string): TDataSetField; overload;
+
+    function  FieldValueToJsonValue(IvField: TField): string; // Field.Value --> "Xxx", 123, null, {}
+    function  FieldToJson(IvField: TField; IvNoFld: boolean = false): string; // Field.Value --> "FldXxx": "Xxx"
+    procedure FieldFromJson(IvField: TField; IvValue: superobject.ISuperObject);
+    procedure FieldsFromJsonFields(IvDs: TDataSet; IvSuperObject: superobject.ISuperObject);
+
+    procedure RecordDeleteSoft(IvDs: TDataSet; IvFieldToRenameAvailable: string);
+    procedure RecordToJson(IvDs: TDataSet; var IvSuperObject: superobject.ISuperObject; IvNoFld: boolean = false; IvRowNoAdd: boolean = false); overload;
+    function  RecordToJson(IvDs: TDataSet; IvNoFld: boolean = false; IvRowNoAdd: boolean = false): string; overload;
+
+    procedure ToTxt (IvDs: TDataSet; var IvTxt : string; IvNoFld: boolean = false; IvRowNoAdd: boolean = false; IvHeaderAdd: boolean = false);
+    procedure ToCsv (IvDs: TDataSet; var IvCsv : string; IvNoFld: boolean = false; IvRowNoAdd: boolean = false; IvHeaderAdd: boolean = false);
+    procedure ToHtml(IvDs: TDataSet; var IvHtml: string; IvNoFld: boolean = false; IvRowNoAdd: boolean = false; IvHeaderAdd: boolean = true );
+
+    function  ToJson(IvDs: TDataSet; var IvJson: string; IvNoFld: boolean; IvRowNoAdd: boolean): integer;                    //  {"Fld1":"aa1","Fld2":"bb1",...},{"Fld1":"aa2","Fld2":"bb2",...}, ...
+    procedure ToJsonVector(IvDs: TDataSet; var IvJson: string; IvNoFld: boolean = false; IvRowNoAdd: boolean = false);       // [{"Fld1":"aa1","Fld2":"bb1",...},{"Fld1":"aa2","Fld2":"bb2",...}, ...]
+    procedure ToJsonTotalAndRows(IvDs: TDataSet; var IvJson: string; IvNoFld: boolean = false; IvRowNoAdd: boolean = false); // {"total":2,"rows":[{"Fld1":"aaa","Fld2":"bbb",...},{"Fld1":"aa2","Fld2":"bb2",...}, ...]}
+    procedure ToJsonKeyValue(IvDs: TDataSet; var IvJson: string; IvNoFld: boolean = false);         // used in <select><option> {"key1":"aaa","key2":"bbb",...} only field[0] and field[1] are considered
+
+    procedure FromJson(IvDs: TDataSet; IvSuperObject: superobject.ISuperObject); overload; // ds need to be available and active (open)
+    procedure FromJson(IvDs: TDataSet; IvJson: string); overload;
+
+    procedure AppendJson(IvDs: TDataSet; IvSuperObject: superobject.ISuperObject);
+    procedure RecordToFldAndValueVectors(IvDs: TDataSet; var IvFldVec: TStringVector; var IvValueVec: TVariantVector; IvNoFld: boolean = true);
+  end;
+
   TFbkRec = record
     Text: string;
   public
@@ -677,6 +992,118 @@ type
     function  DirOpen(IvPath: string; var IvFbk: string): boolean;
     function  DirCreate(IvDir: string; var IvFbk: string): boolean; // deep
     function  DirDelete(IvPath: string; var IvFbk: string): boolean;
+  end;
+
+  THtmRec = record // htmlstuff *** TRANSFORM IN CLASS SO ADDING FDba: TDbaCls ***
+
+    {$REGION 'Help'}
+    (*
+      WebReq : TWebRequest;  // holds request at beginning for internal use
+      WebResp: TWebResponse; // holds response at beginning for internal use
+    *)
+    {$ENDREGION}
+
+  public
+    // attr
+    function  AttrIdName(IvCo: string = ''): string;                                                                   // id="" name=""
+    function  AttrClasse(IvClassVec: array of string): string;                                                         // class=""
+    function  AttrStyle(IvValue: string): string;                                                                      // style=""
+    function  AttrPlaceholder(IvValue: string): string;                                                                // placeholder=""
+    // elements
+    function  A(IvHref, IvText: string): string; overload;                                                             // <a href=""></a>
+    function  A(IvHref, IvFormat: string; IvVec: array of TVarRec): string; overload;                                  //
+    function  B(IvN: integer = 1): string;                                                                             // <br>
+    function  C(IvComment: string): string;                                                                            // <!-- -->
+    function  D(IvContent: string; IvClass: string = ''; IvComment: string = ''): string; overload;                    // <div></div>
+    function  D(IvFormat: string; IvVec: array of TVarRec; IvClass: string = ''; IvComment: string = ''): string; overload; //
+    function  H(IvLevel: integer; IvContent: string; IvClass: string = ''): string; overload;                               // <h1></h1>
+    function  H(IvLevel: integer; IvFormat: string; IvVec: array of TVarRec; IvClass: string = ''): string; overload;       //
+    function  P(IvContent: string; IvClass: string = ''): string; overload;                                            // <p></p>
+    function  P(IvFormat: string; IvVec: array of TVarRec; IvClass: string = ''): string; overload;                    //
+    function  Container(IvContent: string; IvClass: string = ''): string;                                              // <div class="container"></div>
+    function  Panel    (IvContent: string; IvClass: string = ''): string;                                              // <div class="panel"></div>
+    function  Accordion(IvContent: string; IvClass: string = ''): string;                                              //
+    function  Table    (IvContent: string; IvClass: string = ''; IvStyle: string = ''; IvCo: string = ''; IvCaption: string = ''): string;   // <table></table>
+    function  TableResp(IvContent: string; IvClass: string = ''; IvStyle: string = ''; IvCo: string = ''; IvCaption: string = ''): string;   // <div class="responsive"><table></table></div>
+    function  Th       (IvContent: string; IvClass: string = ''): string;                                              // <th></th>
+    function  Td       (IvContent: string; IvClass: string = ''): string;                                              // <td></td>
+    function  Tr       (IvContent: string; IvClass: string = ''): string;                                              // <tr></tr>
+    function  Tc       (IvContent: string; IvClass: string = ''): string; // tablecaption                              // <caption></caption>
+    function  Fa(IvIcon: string; IvStyle: string = ''): string;                                                        // <i class="fa fa-sign-in"></i>
+    // page
+    function  Html(IvDba: TDbaCls; IvTitle, IvContent: string; IvHead: string = ''; IvCss: string = ''; IvJs: string = ''; IvHeader: string = ''; IvFooter: string = ''; IvContainerOn: boolean = true; IvBuilder: integer = 0): string; // <html></html>
+    function  Blank(IvDba: TDbaCls; IvTitle, IvContent: string): string;                                               // <html></html>
+    function  Head(IvTitle: string; IvHead: string = ''; IvCss: string = ''; IvJs: string = ''): string;               // <head></head>
+    function  Navbar(IvDba: TDbaCls; IvContent: string): string;                                                       // <nav></nav>
+    function  SidebarLeft(IvDba: TDbaCls; IvContent: string): string;                                                  // <div class="w3-sidebar w3-animate-left"></div>
+    function  SidebarRight(IvDba: TDbaCls; IvContent: string): string;                                                 // <div class="w3-sidebar w3-animate-right"></div>
+    function  Content(IvContent: string; IvContainerOn: boolean = true): string;                                       // <div class="container content"></div>
+    function  Header(IvContent: string; IvDebug: string = ''): string;                                                 // <header></header>
+    function  Footer(IvDba: TDbaCls; IvContent: string; IvDebug: string = ''): string;                                 // <footer></footer>
+    function  BottomFixed(): string;                                                                                   // go top arrow
+    function  BootScript: string;                                                                                      // <script></script>
+    // pages
+    function  HtmlI(IvDba: TDbaCls; IvTitle: string; IvText: string = ''; IvBuilder: integer = 0): string;             // <html>info</html>
+    function  HtmlW(IvDba: TDbaCls; IvTitle: string; IvText: string = ''; IvBuilder: integer = 0): string;             // <html>warning</html>
+    function  HtmlE(IvDba: TDbaCls; IvTitle: string; IvText: string = ''; IvBuilder: integer = 0): string;             // <html>exception</html>
+    function  HtmlPageNotFound(IvDba: TDbaCls; IvBuilder: integer = 0): string;                                        // <html>not found</html>
+    // gui
+    // alerts
+    function  Alert    (IvTitle: string; IvText: string = ''; IvClass: string = ''): string;                           //
+    function  AlertI   (IvTitle: string; IvText: string = ''): string;                                                 //
+    function  AlertS   (IvTitle: string; IvText: string = ''): string;                                                 //
+    function  AlertW   (IvTitle: string; IvText: string = ''): string;                                                 //
+    function  AlertD   (IvTitle: string; IvText: string = ''): string;                                                 //
+    function  AlertE   (IvTitle: string; IvText: string = ''): string;                                                 //
+    // buttons
+    function  BtnHome(IvCaption: string = ''; IvClass: string = ''; IvStyle: string = ''): string;                     //
+    function  BtnBack(IvCaption: string = ''; IvClass: string = ''; IvStyle: string = ''): string;                     //
+    function  BtnXHome(IvClass: string = ''; IvStyle: string = ''): string;                                            // close panel and go home
+    function  BtnXHide(IvCo: string; IvClass: string = ''; IvStyle: string = ''): string;                              // close panel only
+    // layouts
+    function  SpaceV(IvPx: integer = 32): string;                                                                      // <div style="height:32px"></div>
+    function  SpaceH(IvSpaces: integer = 3): string;                                                                   // ' &nbsp; '
+    function  Row(IvCellVec, IvClassVec, IvStyleVec: TStringVector): string;
+    // table
+    function  TableArr(IvArr: TStringMatrix         ; IvClass: string = ''; IvStyle: string = ''; IvCo: string = ''; IvCaption: string = ''; Iv1stRowIsHeader: boolean = true): string;             //
+    function  TableDs (IvDs : TDataset              ; IvClass: string = ''; IvStyle: string = ''; IvCo: string = ''; IvCaption: string = ''): string;                                               //
+    function  TableSql(IvDba: TDbaCls; IvSql: string; IvClass: string = ''; IvStyle: string = ''; IvCo: string = ''; IvCaption: string = ''; IvTimeOut: integer = DBA_COMMAND_TIMEOUT_SEC): string; // IvSkip, IvLimit: integer
+    function  TableWre: string;                                                                                         // <table>wre</table>
+    // chart
+    function  Chart   (IvCo, IvW, IvH, IvTitle, IvData: string): string;                                                                                                              //
+    function  ChartDs (IvCo, IvW, IvH, IvTitle: string;                 IvDs : TDataset; IvXFld, IvYFld, IvTooltipFld: string): string;                                               //
+    function  ChartSql(IvCo, IvW, IvH, IvTitle: string; IvDba: TDbaCls; IvSql: string  ; IvXFld, IvYFld, IvTooltipFld: string; IvTimeOut: integer = DBA_COMMAND_TIMEOUT_SEC): string; //
+    // form
+    function  Form(IvCoVec, IvKindVec, IvValueVec: array of string; IvClass, IvAction, IvMethod: string): string;       // <form></form>
+    function  Labl(IvContent: string; IvClass: string = ''): string;                                                    // <label></label>
+    function  Input(IvCo, IvKind, IvLabel, IvValue: string; IvPlaceholder: string = ''; IvClass: string = ''; IvStyle: string = ''; IvUseLayout: boolean = true): string; // <input></input>
+    // modals
+    function  ModMessage(IvTitle: string; IvText: string = ''; IvClass: string = ''): string;                           // generic
+    function  ModUserAccountCreate: string;                                                                             //
+    function  ModUserAccountCreateDone: string;                                                                         // reply to the above
+    function  ModUserAccountForgot: string;                                                                             //
+    function  ModUserAccountForgotDone: string;                                                                         // reply to the above
+    function  ModUserLogin: string;                                                                                     //
+    // divs-widgets
+    function  DivTiming(IvMs: integer): string;                                                                         // <p>rendering time</p>
+    function  DivActions(IvWre: TWebRequest): string;                                                                   // all webapp available actions
+    function  DivNews(IvLastHour: integer = 24): string;                                                                //
+    function  DivUserProfile(IvUser, IvUserId: string): string;                                                         //
+    function  DivUserInterest(IvUser, IvUserId: string): string;                                                        //
+    function  DivUserNotification(IvNotification: string): string;                                                      //
+    function  DivUserBlog(IvLastHour: integer = 24): string;                                                            //
+    function  DivUserUpcomingEvent(IvUser: string): string;                                                             //
+    function  DivUserFrienRequest(IvUser: string): string;                                                              //
+    function  DivUserAds(IvUser: string): string;                                                                       //
+    function  DivUserBug(IvUser: string): string;                                                                       //
+    function  DivUserMore(IvUser: string): string;                                                                      //
+    // report
+    function  Report(IvDba: TDbaCls; IvId: integer): string;                                                            // fullreport
+    // test
+    function  TestTheme: string;                                                                                        //
+    function  TestTable(IvRow, IvCol: cardinal): string;                                                                // big nxm html table string for loading test
+    function  TestForm: string;                                                                                         // a sample form with all kind of inputs
+    function  TestChart(IvN: cardinal = 100): string;                                                                   //
   end;
 
   THttRec = record // http   https://www.loggly.com/blog/http-status-code-diagram
@@ -834,7 +1261,24 @@ type
     procedure CrySet(const IvPath, IvValue: string);
   end;
 
+  TIsaRec = record // isapi, companion with TSoaRec
+  const
+    ISAPI_URL       = 'http://%s';                                                            // %s=website:port (localhost, www.wks.cloud)
+    ISAPI_DLL_URL   =          '/Wks%sIsapiProject.dll';                                      // %1=Xxx
+  public
+    function  IsapiUrl(IvObj: string = 'System'): string;
+  end;
+
+  TLgoRec = record // logo
+  public
+    function  InvSpec(IvOrganization: string = ''): string;
+    function  InvUrl(IvOrganization: string = ''): string;
+    function  Spec(IvOrganization: string = ''): string;
+    function  Url(IvOrganization: string = ''): string;
+  end;
+
   PLgrRec = ^TLgrRec;
+
   TLgrRec = record // logrequest
     Entry: string;
   end;
@@ -931,6 +1375,40 @@ type
     function  VecSingleMin(const IvSingleVec: array of single): single; // *** move to TVecRev ***
   end;
 
+  TMbrRec = record // member
+    State        : string; // Active
+    Member       : string; // giarussi
+    Organization : string; // Wks
+    Role         : string; // Administrator, Member, Guest
+    Level        : string; // Low, Normal, High
+    Email        : string; // giarussi@engitech.it
+    Phone        : string; // 348/5904744
+    Authorization: string; // jsonblock
+  public
+    function  Info: string;
+    function  DbaSelect(var IvFbk: string): boolean;
+    function  RioInit(IvMember, IvOrganization: string; var IvFbk: string): boolean;
+    function  IsGuest: boolean;
+    function  IsMember: boolean;
+    function  IsSupervisor: boolean;
+    function  IsManager: boolean;
+    function  IsAdmin: boolean;
+    function  IsAdminHigh: boolean;
+    function  IsWksAdmin: boolean;
+    function  IsOwner: boolean; // organization-site owner
+    function  IsAuthorized(IvResource: string; var IvFbk: string): boolean;
+    function  CanInsert(IvResource: string): boolean;
+    function  CanDelete(IvResource: string): boolean;
+    function  CanEdit(IvResource: string): boolean;
+    function  CanView(IvResource: string): boolean;
+    function  Grade: integer; // 00..42 depending on role/level values
+    function  MemberAtOrganization: string;
+    function  PathAlpha(IvMember: string = ''): string;
+    function  UrlAlpha(IvMember: string = ''): string;
+    function  BadgePath(IvMember: string = ''): string;
+    function  BadgeUrl(IvMember: string = ''): string;
+  end;
+
   TMesRec = record // messages, feedbacks only, for inputs use ask
   const
     PLEASE_ENTER_PROXY_AND_PASSWORD    = 'Please enter the proxy address and your username and password if yoy are bihind a firewall';
@@ -1002,6 +1480,36 @@ type
     function  FromFile(IvFileName: TFileName): string;
     function  FromRegistry(IvFileExt: string): string;
     function  FromContent(IvContent: pointer; IvLength: integer): string;
+  end;
+
+  TNamRec = record // name
+
+    {$REGION 'Help'}
+    {
+      naming conventions
+      --------------------------
+      pascal:   GiovanniIarussi
+      camel:    giovanniIarussi
+      snake:    giovanni_iarussi
+      const:    GIOVANNI_IARUSSI
+    }
+    {$ENDREGION}
+
+  public
+    function  Rnd(IvLenght: integer = 4): string;
+    function  RndCsv(IvListLenght: integer; IvNameLenght: integer = 4): string;
+    function  RndPrefix(IvPrefix: string = ''; IvLenght: integer = 4): string;
+    function  RndPostfix(IvPostfix: string = ''; IvLenght: integer = 4): string;
+    function  Std(IvName: string = ''; IvPostfix: string = ''): string;
+    function  Co(IvName: string = ''): string;
+    function  CoRemove(IvName: string): string;
+    function  CoRnd(IvPrefix: string = ''; IvLenght: integer = 4): string;
+    function  HasNum(IvName: string): boolean;           // Dog7 --> true, Dog --> false
+    function  IsNumOf(IvName, IvBase: string): boolean;  // Dog7; Dog --> true , Dog7;
+    function  NumBasePart(IvName: string): string;       // Dog7 --> Dog
+    function  NumCodePart(IvName: string): string;       // Dog7 --> 7
+    function  NumPrev(IvName: string): string;           // Dog7 --> Dog6, Dog2 --> Dog , Dog1 --> Dog , Dog --> Dog
+    function  NumNext(IvName: string): string;           // Dog7 --> Dog8, Dog1 --> Dog2, Dog  --> Dog2, ...
   end;
 
   TNetRec = record // network
@@ -1283,6 +1791,24 @@ type
     function  TreePathIs(IvThreePath: string): boolean;            //
   end;
 
+  TPerRec = record // person
+    Id     : integer; // id
+    PId    : integer; // pid
+    Person : string ; // giarussi
+    Name   : string ; // Giovanni
+    Surname: string ; // Iarussi
+    Email  : string ; // giarussi@yahoo.com
+  public
+    function  SoapServerInfo(var IvFbk: string): boolean;
+    function  HasKey(var IvFbk: string): boolean;
+    function  DbaSelect(IvDba: TDbaCls; var IvFbk: string; IvInsertIfNotExist: boolean = false): boolean;
+    function  FullName: string;
+    function  PathAlpha(IvPerson: string = ''): string;
+    function  UrlAlpha(IvPerson: string = ''): string;
+    function  PicturePath(IvPerson: string = ''): string;
+    function  PictureUrl(IvPerson: string = ''): string;
+  end;
+
   TPopRec = record // pop3
     Organization : string;
     Host         : string;
@@ -1307,6 +1833,25 @@ type
   public
     procedure SoapConnectionProxySet(var IvSoapConnection: TSoapConnection);
     procedure HttpRioProxySet(var IvHttpRio: THTTPRIO);
+  end;
+
+  TPwdRec = record // password
+  const
+    PWD_MIN_LEN = 6;
+  public
+    function  Generate(IvLength: integer = 8; IvUseLower: boolean = true; IvUseUpper: boolean = false; IvUseNumber: boolean = false; IvUseWierd: boolean = false): string;
+    function  GenerateWord(IvLanguage: string; var IvPassword: string; var IvFbk: string): boolean; // generate a language work for better remeber !!!
+    function  IsSecure(IvPassword: string; var IvFbk: string): boolean;
+    function  StrongScore(IvPassword: string; var IvFbk: string): integer;
+    function  Encode(IvPassword: string): string;
+    function  Decode(IvPassword: string): string;
+    // dba
+    function  DbaMatch(IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean;
+    function  DbaChange(IvOrganization, IvUsername, IvPasswordOld, IvPasswordNew: string; var IvFbk: string): boolean;
+    // rio
+    function  RioChange(IvOrganization, IvUsername, IvPasswordOld, IvPasswordNew: string; var IvFbk: string): boolean;
+    function  RioRecover(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
+    function  RioReset(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
   end;
 
   TRexRec = record // regex https://www.debuggex.com
@@ -1622,6 +2167,152 @@ type
     function  Str(IvLenght: integer = 4): string;
   end;
 
+  TRolRec = record // role/level
+
+    {$REGION 'Help'}
+    (*
+      15 grades = role/levels
+      ------------------------------------------------------
+                           |    0     |    1     |    2     |
+                            --------------------------------
+                           |    Low   |  Normal  |   High   | \
+                            --------------------------------   | levels
+            role           |  Junior  |  Normal  |  Senior  | /
+       --- -------------------------------------------------
+      | 6 | System         |               90               | \
+       --- -------------------------------------------------   |
+      | 5 | Architech      |               50               |  |
+       --- -------------------------------------------------   |
+      | 4 | Administrator  |    40    |    41    |    42    |  |
+       --- -------------------------------------------------   |
+      | 3 | Manager        |    30    |    31    |    32    |  | grades
+       --- -------------------------------------------------   |
+      | 2 | Supervisor     |    20    |    21    |    22    |  |
+       --- -------------------------------------------------   |
+      | 1 | Member/User    |    11    |    11    |    12    |  |
+       --- -------------------------------------------------   |
+      | 0 | Guest          |               00               | /
+       --- -------------------------------------------------
+    *)
+    {$ENDREGION}
+
+  const
+
+    {$REGION 'Const'}
+    // roles
+    ROLE_SYSTEM                = 'System'       ; { 9}
+    ROLE_ARCHITECT             = 'Architect    '; { 5}
+    ROLE_ADMINISTRATOR         = 'Administrator'; { 4}
+    ROLE_MANAGER               = 'Manager'      ; { 3}
+    ROLE_SUPERVISOR            = 'Supervisor'   ; { 2}
+    ROLE_MEMBER                = 'Member'       ; { 1}
+    ROLE_GUEST                 = 'Guest'        ; { 0}
+
+    // level
+    LEVEL_SYSTEM               = 'System'       ; { 9}
+    LEVEL_HIGH                 = 'High'         ; { 2} // senior
+    LEVEL_NORMAL               = 'Normal'       ; { 1} //
+    LEVEL_LOW                  = 'Low'          ; { 0} // junior
+
+    // grades
+    GRADE_GUEST                = 00;
+    GRADE_MEMBER_LOW           = 10;
+    GRADE_MEMBER_NORMAL        = 11;
+    GRADE_MEMBER_HIGH          = 12;
+    GRADE_SUPERVISOR_LOW       = 20;
+    GRADE_SUPERVISOR_NORMAL    = 21;
+    GRADE_SUPERVISOR_HIGH      = 22;
+    GRADE_MANAGER_LOW          = 30;
+    GRADE_MANAGER_NORMAL       = 31;
+    GRADE_MANAGER_HIGH         = 32;
+    GRADE_ADMINISTRATOR_LOW    = 40;
+    GRADE_ADMINISTRATOR_NORMAL = 41;
+    GRADE_ADMINISTRATOR_HIGH   = 42;
+    GRADE_ARCHITECT            = 50;
+    GRADE_SYSTEM               = 90;
+    GRADE_VECTOR: array[0..14] of string = (
+      '00 Guest'               // guest
+    , '11 MemberLow'           // member
+    , '12 MemberNormal'
+    , '13 MemberHigh'
+    , '20 SupervisorLow'       // supervisor
+    , '21 SupervisorNormal'
+    , '22 SupervisorHigh'
+    , '30 ManagerLow'          // manager
+    , '31 ManagerNormal'
+    , '32 ManagerHigh'
+    , '40 AdministratorLow'    // administrator
+    , '41 AdministratorNormal'
+    , '42 AdministratorHigh'
+    , '50 Architect'           // architect
+    , '90 System'              // system
+    );
+    {$ENDREGION}
+
+  end;
+
+  TRvaRec = record
+
+    {$REGION 'Help'}
+    {
+         __ Rv
+        /
+    [RvXxx(Arg0| Arg1| Arg2)]
+           ¯¯¯¯¯¯¯\¯¯¯¯¯¯¯¯
+                   \__ Args list
+
+    Variable/Placeholder/TagsReplacement
+
+    NOTE: if args list is empty parentesis are still necessary, like this: RvXxx()
+    NOTE: consider changing [RvFoo()] to [=Foo()]
+    }
+    {$ENDREGION}
+
+//const
+  //RV_RECURSION_MAX = 99;
+  private
+  //Rv: string; // RvXxx(Arg0| Arg1| Arg2)
+  //function  ArgVector: TStringVector; // will return ['Arg0', 'Arg1', 'Arg2']
+    function  RvFunction(IvDba: TDbaCls; IvFunction, IvArgsList: string): string;
+    function  RvFunction2(IvDba: TDbaCls; f, a: TStringVector): string;
+  public
+    function  Rv2(IvDba: TDbaCls; IvString: string; IvCommentRemove: boolean = false; IvEmptyLinesRemove: boolean = true; IvTrim: boolean = true): string; // [RvAaa(Arg0| Arg1| Arg2)]
+    function  Rv(IvDba: TDbaCls; IvString: string; IvCommentRemove: boolean = false): string; //
+    function  RvJ(IvString, IvJsonStr: string; IvReplaceFlag: TReplaceFlags = []): string;    // recursively replace all [Rv<json.path>()] with SO(IvJsonStr)['json.path'].Value // $Aaa.Bbb$ -> 123      where IvJsonStr = {"Aaa": {"Bbb": 123}, ...}
+    function  RvDs(IvString: string; IvDs: TDataset): string;                                 // $FldAaa$  -> 123      where IvDs      = FldAaa=123, ...
+  end;
+
+  TSbuRec = record // stringbuilder
+    Text: string;
+  public
+    procedure Clear;                                                                                             // clear all
+    procedure Emp(IvNl: integer = 1);                                                                            // add empty line
+
+    procedure Ann(IvString: string);                                                                             // add without prepend new line
+    procedure Add(IvString: string; IvNlPrefix: integer = 1);                                                    // add with a newline after with optional one before
+    procedure Aif(IvString: string; IvTest: boolean; IvNlPrefix: integer = 1);                                   // add if test is true
+    procedure AiX(IvString: string; IvNlPrefix: integer = 1);                                                    // add if string exists
+    procedure AiE(IvString: string; IvDefault: string; IvNlPrefix: integer = 1);                                 // add default if string is empty
+    procedure AXr(IvString: string; IvReturn: string; IvNlPrefix: integer = 1);                                  // add return if string exists
+  //procedure AdS(IvString: string; IvNlPrefix: integer = 1);                                                    // add success
+  //procedure AdW(IvString: string; IvNlPrefix: integer = 1);                                                    // add warning
+  //procedure AdE(IvE: Exception;   IvNlPrefix: integer = 1);                                                    // add exception
+    procedure ATg(IvString: string; IvTag: string);                                                              // add inside html <tag></tag> if string exists
+
+    procedure Fmt(IvFormat: string; IvVarRecVector: array of TVarRec; IvNlPrefix: integer = 1);                  // add format
+    procedure Fif(IvFormat: string; IvVarRecVector: array of TVarRec; IvTest: boolean; IvNlPrefix: integer = 1); // add format if test is true
+    procedure Fie(IvFormat: string; IvVarRecVector: array of TVarRec; IvTest: string ; IvNlPrefix: integer = 1); // add format if test exists
+    procedure FiX(IvFormat,            IvIfExist: string; IvNlPrefix: integer = 1);                              // add format if exists
+    procedure FiY(IvFormat, IvFormat2, IvIfExist: string; IvNlPrefix: integer = 1);                              // add format if exists
+
+    procedure Rep(IvString, IvOut, IvIn: string; IvNlPrefix: integer = 1);                                       // add replacing
+    procedure Iif(IvTest: boolean; IvTrueVal, IvFalseVal: string; IvNlPrefix: integer = 1);                      // add s1 or s2
+    procedure Swi(IvSwitchList, IvSwitch, IvString: string; IvNlPrefix: integer = 1);                            // add if switch
+  //procedure IXr();
+  //procedure IfT();
+  //procedure IfF();
+  end;
+
   TSesRec = record // session
     Session      : string;
     BeginDateTime: TDateTime;
@@ -1653,6 +2344,18 @@ type
   public
     function  DbaSelect(var IvFbk: string): boolean;
     function  RioInit(IvOrganization: string; var IvFbk: string): boolean;
+  end;
+
+  TSobRec = record // superobject
+  public
+    function  ObjectInfo(const IvAsObject: superobject.TSuperTableString; var IvFbk: TFbkRec; const IvPrefix: string = ''): string;
+    function  SuperTypeToFieldType(IvSuperType: superobject.TSuperType): TFieldType;
+    function  SuperTypeToFieldSize(IvSuperType: superobject.TSuperType): integer;
+    function  Pretty(IvString: WideString): string;
+    function  FromFileUTF8(const IvFileName: string): superobject.ISuperObject; // delphi speaks UTF16!
+    procedure ToFileUTF8(const aFileName: string; o: superobject.ISuperObject); // idem
+    function  StrEscape(const IvString: string): string;
+    function  StrUnescape(const IvString: AnsiString): string;
   end;
 
   TSopRec = record // soap
@@ -1731,7 +2434,7 @@ type
   //SOAP_SERVER_RIO_WSDL_FOUND_NO_RS  = 'SOAP server, unable to find RIO WSDL url at %s';    // 'SOAP server, impossibile trovare WSDL url per servizio RIO di %s';
   //SOAP_SERVER_RIO_WSDL_FOUND_OK_RS  = 'SOAP server, found RIO WSDL url at %s';             // 'SOAP server, trovato WSDL url per servizio RIO di %s';
   public
-    function  SoapUrl(IvObj: string = ''): string;
+    function  SoapUrl(IvObj: string = 'System'): string;
     function  SoapRioUrl(IvObj, IvService: string; var IvUrl, IvFbk: string): boolean;
     function  SoapRioWsdl(IvObj, IvService: string; var IvWsdl, IvFbk: string): boolean;
     function  DmUrl(var IvFbk, IvUrl: string; IvObj: string = ''; IvService: string = 'Main'): boolean; // datamodule, IWSDLPublish or IXxxSoapYyyDataModule (datamodule: Xxx=Object, Yyy=Service=Main)
@@ -1840,35 +2543,51 @@ type
     {$ENDREGION}
 
   public
-    function  W(IvE: Exception): string;                                              // standardwarning
-    function  E(IvE: Exception): string;                                              // standardexception (e.Message)
-    function  E2(IvE: Exception): string;                                             // standardexception (e.ClassName and e.Message)
-    function  Between(IvTagLeft, IvTagRight, IvString: string): string;               // or Inside s1 = '[', s2 = ']', s3 = 'abc[xxx]def' -> 'xxx'
-    function  Bite(IvString, IvDelimiter: string; var IvPos: integer): string;        // return front token based on token delim, each call returns front token and adjusts IvPos to the start of the next token or 0 if this is the last token
-    function  Coalesce(IvStringVector: TStringVector): string;                        // return 1st not empty string
-    function  Collapse(const IvString: string): string;                               // 'This Is A Test' --> 'ThisIsATest'
-    function  CommentRemove(IvString: string): string;                                // remove all types of comments
-    function  EmptyLinesRemove(IvString: string): string;                             // remove all emtpy lines
-    function  Expande(const IvString: string; IvDelimiterChar: string = ' '): string; // 'ThisIsATest' --> 'This Is A Test' but 'This_IsA_Test' --> 'ThisIs ATest'
-    function  Has(IvString, IvSubString: string; IvCaseSensitive: boolean = false): boolean; // contains
-    function  HeadAdd(IvString, IvHead: string): string;
-    function  HeadRemove(IvString, IvHead: string): string;
-    function  Is09(const IvString: string): boolean;
-    function  IsInteger(const IvString: string): boolean;
-    function  IsFloat(const IvString: string): boolean;
-    function  IsNumeric(const IvString: string): boolean;
-    function  LeftOf(IvTag, IvString: string; IvTagInclude: boolean = false): string;
-    function  OneLine(IvString: string): string;   // replace cr+nl with nothing
-    function  OneSpace(IvString: string): string;
-    function  Pad(IvString, IvFillChar: string; IvStringLen: integer; IvStrLeftJustify: boolean): string; // pads a string and justifies left if IvStrLeftJustify = true
-    function  PartN(IvString: string; IvNZeroBased: integer; IvDelimiter: string = '_'): string; // parser, pick up a id-th substring, 1 based
-    function  PosAfter(IvSubString, IvString: string; IvStart: integer = 1): integer;
-    function  Replace(IvString, IvOut, IvIn: string): string;
+    function  W(IvE: Exception): string;                                                                        // standardwarning
+    function  E(IvE: Exception): string;                                                                        // standardexception (e.Message)
+    function  E2(IvE: Exception): string;                                                                       // standardexception (e.ClassName and e.Message)
+    function  Between(IvTagLeft, IvTagRight, IvString: string): string;                                         // or Inside s1 = '[', s2 = ']', s3 = 'abc[xxx]def' -> 'xxx'
+    function  Bite(IvString, IvDelimiter: string; var IvPos: integer): string;                                  // return front token based on token delim, each call returns front token and adjusts IvPos to the start of the next token or 0 if this is the last token
+    function  CamelToVec(IvString: string): TStringVector;                                                      // ThisIsATest    --> ['This', 'Is', 'A', 'Test']
+    function  CharShift(const IvString: string; IvShift: integer = 1): string;                                  // shift each char -/+
+    function  Coalesce(IvStringVector: TStringVector): string;                                                  // return 1st not empty string
+    function  Collapse(const IvString: string): string;                                                         // 'This Is A Test' --> 'ThisIsATest'
+    function  CommentRemove(IvString: string): string;                                                          // remove all types of comments
+    function  EmptyLinesRemove(IvString: string): string;                                                       // remove all emtpy lines
+    function  Expande(const IvString: string; IvDelimiterChar: string = ' '): string;                           // 'ThisIsATest' --> 'This Is A Test' but 'This_IsA_Test' --> 'ThisIs ATest'
+    function  Has(IvString, IvSubString: string; IvCaseSensitive: boolean = false): boolean;                    // contains
+    function  HasRex(IvString, IvRex: string; IvOpt: TRegExOptions = [roIgnoreCase, roMultiLine]): boolean;     // containsrex
+    function  HasWildcard(IvString, IvStrWithWildcard: string): boolean;                                        // abc*def
+    function  HeadAdd(IvString, IvHead: string): string;                                                        //
+    function  HeadRemove(IvString, IvHead: string): string;                                                     //
+    function  Is09(const IvString: string): boolean;                                                            //
+    function  IsInteger(const IvString: string): boolean;                                                       //
+    function  IsFloat(const IvString: string): boolean;                                                         //
+    function  IsNumeric(const IvString: string): boolean;                                                       //
+    function  IsPath(const IvString: string): boolean;                                                          // /Root/Organization or Root/Organization with / \ .
+    function  Left(IvString: string; IvCount: integer): string;                                                 //
+    function  LeftOf(IvTag, IvString: string; IvTagInclude: boolean = false): string;                           //
+    function  LeftCut(s: string; i: integer): string;                                                           // return the string without first i chars
+    function  Right(IvString: string; IvCount: integer): string;                                                //
     function  RightOf(IvTag, IvString: string; IvTagInclude: boolean = false; IvLast: boolean = false): string; // normally use the 1st tag in the string
-    function  Split(IvString: string; IvDelimiters: string = ','): TStringDynArray;
-    function  TailAdd(IvString, IvTail: string): string;
-    function  TailRemove(IvString, IvTail: string): string;
-    function  ZeroLeadingAdd(IvString: string; IvLen: integer): string;
+    function  RightCut(s: string; i: integer): string;                                                          // return the string without last i chars
+    function  Match(IvSubString, IvString: string; IvCharMinToMatch: integer = -1): boolean;                    // abc Abcdef, -1 = match all ivsubstring, case insensitive
+    function  OneLine(IvString: string): string;                                                                // replace cr+nl with nothing
+    function  OneSpace(IvString: string): string;                                                               //
+    function  Pad(IvString, IvFillChar: string; IvStringLen: integer; IvStrLeftJustify: boolean): string;       // pads a string and justifies left if IvStrLeftJustify = true
+    function  Quote(const IvString: string): string;                                                            // 'abc'
+    function  QuoteDbl(const IvString: string): string;                                                         // "abc"
+    function  PartN(IvString: string; IvNZeroBased: integer; IvDelimiter: string = '_'): string;                // parser, pick up a id-th substring, 1 based
+    function  PosAfter(IvSubString, IvString: string; IvStart: integer = 1): integer;                           //
+    function  Proper(IvString: string): string;                                                                 //
+    function  Remove(IvString, IvOut: string): string;                                                          //
+    function  Replace(IvString, IvOut, IvIn: string): string;                                                   //
+    function  Reverse(IvString: string): string;                                                                //
+    function  Split(IvString: string; IvDelimiters: string = ','): TStringDynArray;                             //
+    function  TailAdd(IvString, IvTail: string): string;                                                        //
+    function  TailRemove(IvString, IvTail: string): string;                                                     //
+    function  ToBool(IvString: string; IvDefault: boolean = false): boolean;                                    //
+    function  ZeroLeadingAdd(IvString: string; IvLen: integer): string;                                         //
   end;
 
   TSysRec = record // ex wks, so Wks may become a normal organization
@@ -1964,46 +2683,6 @@ type
 //  function  TempPath: string;         //   \$Tmp
 //  function  UserPath: string;         //   \$Usr
 //  function  PersonUserMemberCreate(IvName, IvSurname, IvGender, IvLanguage, IvSsn, IvPhone, IvMobile, IvEmail, IvUsername, IvState, IvSupervisor, IvRole, IvLevel, IvOrganization, IvDepartment, IvArea, IvActivity, IvTeam: string; var IvFbk: string): boolean;
-  end;
-
-  TVecRec = record // vetor
-    function  Nx(IvStringVec: array of string): boolean; // is not exists  = empty
-    function  Ex(IvStringVec: array of string): boolean; // is existent    = not empty
-    function  Has(const IvString: string; IvStringVector: TStringVector; IvCaseSensitive: boolean = false): boolean;
-    function  ToList(IvStringVector: TStringVector; IvDelimiterChar: string = DELIMITER_CHAR): string;
-    function  ToListNotEmpty(IvVector: TStringVector; IvDelimiterChar: string = DELIMITER_CHAR): string;
-    function  ToTxt(IvStringVector: TStringVector): string; overload;
-    function  ToTxt(IvDoubleVector: TDoubleVector): string; overload;
-    function  FromStr(IvString: string; IvDelimChars: string = ','; IvTrim: boolean = true): TStringVector;
-    function  FromCsv(IvString: string; IvTrim: boolean = true): TStringVector;
-    function  ItemRnd(IvStringVector: array of string): string; // TStringVector non worka con vettori constanti
-    function  Collapse(IvStringVector: TStringVector): string;  // ['Aaa', 'Bbb', ...] -> AaaBbb...
-  end;
-
-  TVntRec = record // variant - http://docs.embarcadero.com/products/rad_studio/delphiAndcpp2009/HelpUpdate2/EN/html/delphivclwin32/Variants_VarArrayCreate.html
-  public
-    function  TypeIsStr(const IvVarType: TVarType): boolean;
-
-    function  IsNull(IvVariant: variant; IvDefault : variant): variant;
-    function  NullIf(IvVariant: variant; IvIsThis: variant): variant;
-    function  ToStr(IvVariant: variant; IvDefault: string = ''): string;
-    function  ToInt(IvVariant: variant; IvDefault: integer = 0): integer;
-
-    function  HasData(IvVariant: variant): boolean;
-    function  IsEmpty(IvVariant: Variant): boolean;
-    function  IsStr(const IvVariant: Variant): boolean;
-
-    function  RecCopy(const IvVarRec: TVarRec): TVarRec; // copies a TVarRec and its contents, if the content is referenced the value will be copied to a new location and the reference updated
-    procedure RecFinalize(var IvVarRec: TVarRec);// TVarRecs created by VarRecCopy must be finalized with this function, you should not use it on other TVarRecs, use it only on copied TVarRecs!
-
-    function  RecVectorIsEmpty(IvVarRecVector: array of TVarRec{; var IvFbk: string}): boolean;
-    function  RecVectorCreate(const IvElements: array of const): TVarRecVector; // creates a TVarRecVector out of the values given, uses VarRecCopy to make copies of the original elements
-    procedure RecVectorFinalize(var IvVarRecVector: TVarRecVector); // TVarRecVector contains TVarRecs that must be finalized, this function does that for all items in the array
-    procedure RecVectorClear(var IvVarRecVector: TVarRecVector);
-
-    function  ToVarRec(IvVariant: variant): TVarRec;
-    function  RecToVar(IvVarRec: TVarRec): variant;
-    procedure ToVarRecVector(IvVariant: variant; var IvVarRecVector: TVarRecVector);
   end;
 
   TUagRec = record // useragent
@@ -2103,6 +2782,71 @@ type
     function  RioExists(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
     function  RioIsActive(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
     function  RioIsAuthenticated(IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean;
+  end;
+
+  TVecRec = record // vetor
+    function  Nx(IvStringVec: array of string): boolean; // is not exists  = empty
+    function  Ex(IvStringVec: array of string): boolean; // is existent    = not empty
+    function  Has(const IvString: string; IvStringVector: TStringVector; IvCaseSensitive: boolean = false): boolean;
+    function  ToList(IvStringVector: TStringVector; IvDelimiterChar: string = DELIMITER_CHAR): string;
+    function  ToListNotEmpty(IvVector: TStringVector; IvDelimiterChar: string = DELIMITER_CHAR): string;
+    function  ToTxt(IvStringVector: TStringVector): string; overload;
+    function  ToTxt(IvDoubleVector: TDoubleVector): string; overload;
+    function  FromStr(IvString: string; IvDelimChars: string = ','; IvTrim: boolean = true): TStringVector;
+    function  FromCsv(IvString: string; IvTrim: boolean = true): TStringVector;
+    function  ItemRnd(IvStringVector: array of string): string; // TStringVector non worka con vettori constanti
+    function  Collapse(IvStringVector: TStringVector): string;  // ['Aaa', 'Bbb', ...] -> AaaBbb...
+  end;
+
+  TVntRec = record // variant - http://docs.embarcadero.com/products/rad_studio/delphiAndcpp2009/HelpUpdate2/EN/html/delphivclwin32/Variants_VarArrayCreate.html
+  public
+    function  TypeIsStr(const IvVarType: TVarType): boolean;
+
+    function  IsNull(IvVariant: variant; IvDefault : variant): variant;
+    function  NullIf(IvVariant: variant; IvIsThis: variant): variant;
+    function  ToStr(IvVariant: variant; IvDefault: string = ''): string;
+    function  ToInt(IvVariant: variant; IvDefault: integer = 0): integer;
+
+    function  HasData(IvVariant: variant): boolean;
+    function  IsEmpty(IvVariant: Variant): boolean;
+    function  IsStr(const IvVariant: Variant): boolean;
+
+    function  RecCopy(const IvVarRec: TVarRec): TVarRec; // copies a TVarRec and its contents, if the content is referenced the value will be copied to a new location and the reference updated
+    procedure RecFinalize(var IvVarRec: TVarRec);// TVarRecs created by VarRecCopy must be finalized with this function, you should not use it on other TVarRecs, use it only on copied TVarRecs!
+
+    function  RecVectorIsEmpty(IvVarRecVector: array of TVarRec{; var IvFbk: string}): boolean;
+    function  RecVectorCreate(const IvElements: array of const): TVarRecVector; // creates a TVarRecVector out of the values given, uses VarRecCopy to make copies of the original elements
+    procedure RecVectorFinalize(var IvVarRecVector: TVarRecVector); // TVarRecVector contains TVarRecs that must be finalized, this function does that for all items in the array
+    procedure RecVectorClear(var IvVarRecVector: TVarRecVector);
+
+    function  ToVarRec(IvVariant: variant): TVarRec;
+    function  RecToVar(IvVarRec: TVarRec): variant;
+    procedure ToVarRecVector(IvVariant: variant; var IvVarRecVector: TVarRecVector);
+  end;
+
+  TVstRec = record // virtualstringtree
+  const
+    ROOT_ID         =   1;
+    ZZZ_ID          =   2;
+    SYSTEM_ID       =   3;
+    TEST_ID         =   4;
+    TEMPLATE_ID     =   5;
+    ORGANIZATION_ID =   6;
+    PEOPLE_ID       =   7;
+    PUBLIC_ID       =   8;
+    HELP_ID         =   9;
+    NEW_ID          =  10;
+    ERROR_ID        =  11; // !!! exception
+    RESERVED_ID     =  99;
+    SYS_LAST_ID     = 100; // last system id
+    FREE_1ST_ID     = 101;
+  public
+    procedure OnPaintText(   IvVst: TBaseVirtualTree  ; const TargetCanvas: TCanvas; Node: PVirtualNode; Column: TColumnIndex; TextType: TVSTTextType);
+    procedure OnCompareNodes(IvVst: TBaseVirtualTree  ; Node1, Node2: PVirtualNode; Column: TColumnIndex; var Result: integer);
+    procedure GetImageIndex( IvVst: TBaseVirtualTree  ; Node: PVirtualNode; Kind: TVTImageKind; Column: TColumnIndex; var Ghosted: Boolean; var ImageIndex: TImageIndex);
+    procedure GetNodeInfo(   IvVst: TBaseVirtualTree  ; Node: PVirtualNode; var IvPath, IvCaption: string; var IvKey, IvLevel, IvChildCount: integer);
+    function  GetNodePath(   IvVst: TBaseVirtualTree  ; IvNode: PVirtualNode; IvDelimiter: char = '/'; IvUseLevels: boolean = false): string;
+    procedure NodeParamSet(  IvVst: TVirtualStringTree; IvNode: PVirtualNode; IvDs: TDataSet);
   end;
 
   TWreRec = record // webrequestextended
@@ -2232,40 +2976,55 @@ type
 
 {$REGION 'Var'}
 var
-  h0 : cardinal;   // handlespare
+//ini: TIniCls;    // ini *** NOT GLOBAL ***
+//log: TLogCls;    // log *** NOT GLOBAL ***
+  h00: cardinal;   // handlespare
+  all: TAllRec;    // all
   ask: TAskRec;    // ask, win-api-only-dialogs
   byn: TBynRec;    // binary
   cns: TCnsRec;    // connectionstring
+  cod: TCodRec;    // code
+  col: TColRec;    // color
   con: TConRec;    // connection
   cry: TCryRec;    // cripto
   dat: TDatRec;    // datetime
 //db0: TDbaCls;    // sysdb, wksdb                  (mssql)   *** NOT GLOBAL ***
 //db1: TDbaCls;    // wksmdb01a,wksmdb01b,wksmdb01c (mongodb) *** NOT GLOBAL ***
   dot: TDotRec;    // dotobject (like Person.Person.Name <-> DbaPerson.dbo.TblPerson+FldName)
+  dst: TDstRec;    // dataset
   fbk: TFbkRec;    // feedback
   fsy: TFsyRec;    // filesystem
   iif: TIifRec;    // inlineif
+  htm: THtmRec;    // html
   htt: THttRec;    // http
   iis: TIisRec;    // inlineis
   img: TImgRec;    // image
-//ini: TIniCls;    // ini *** NOT GLOBAL ***
-//log: TLogCls;    // log *** NOT GLOBAL ***
+  isa: TIsaRec;    // isapi
   lgt: TLgtCls;    // log threaded *** GLOBAL ***
+  lgo: TLgoRec;    // logo
   lst: TLstRec;    // list/csv (csv or generic list like aaa/bbb/ccc or aaa|bbb|ccc)
   mat: TMatRec;    // math
+  mbr: TMbrRec;    // member
   mes: TMesRec;    // message, dialog, taskdialog *** MOVE "dialog, taskdialog" IN "ask" ***
   mim: TMimRec;    // mimetype
+  nam: TNamRec;    // name
   net: TNetRec;    // network
   obj: TObjRec;    // object content, param, switch, ... (System, User, Member, Organization, ...)
   org: TOrgRec;    // organization
   pat: TPatRec;    // pathfile (or more general treepath)
+  per: TPerRec;    // person
   pop: TPopRec;    // pop3
   pxy: TPxyRec;    // proxy
+  pwd: TPwdRec;    // password
   rex: TRexRec;    // regex
   rio: TRioRec;    // httprio
   rnd: TRndRec;    // random
+  rol: TRolRec;    // role/level
+  rva: TRvaRec;    // replacevariable
+  sbu: TSbuRec;    // stringbuilder
   ses: TSesRec;    // session
   smt: TSmtRec;    // smtp
+  sob: TSobRec;    // jsonsuperobject
   sop: TSopRec;    // soap
   sql: TSqlRec;    // sql
   srv: TSrvRec;    // server (isapi,soap,rest)
@@ -2278,6 +3037,7 @@ var
   usr: TUsrRec;    // user
   vec: TVecRec;    // vector
   vnt: TVntRec;    // variant
+  vst: TVstRec;    // virtualstringtree
   wa0: TStopwatch; // stopwatch (only global lifetime, do not use!)
   wre: TWreRec;    // webrequestextended
   wrs: TWrsRec;    // webresponse
@@ -2307,11 +3067,132 @@ uses
   , Vcl.Forms                       // application, form
   , Vcl.ExtActns                    // tbrowseurl
   , Vcl.StdCtrls                    // tlabel
+  , Vcl.Controls                    // crhourglass
+  , Vcl.GraphUtil                   // ColorHLSToRGB, ColorRGBToHS
 //, Vcl.StdActns                    // tbrowseforfolder
   , IdURI                           // tiduri
   , HTTPSend                        // araratsynapse
 //, WksSystemSoapMainServiceIntf
   ;
+{$ENDREGION}
+
+{$REGION 'TAllRec'}
+function TAllRec.AllRecordDbaInit(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
+begin
+  // sys (refresh some info since the record is initialized once at beginning using sys.DbaInit(), not for each request)
+  sys.HLib := obj.DbaParamGet('System', '113', 'W3');
+
+  // what to do?
+//Result := iis.Ex(usr.Username) and iis.Ex(usr.Password);
+  // user
+  usr.Organization := IvOrganization; // at 1st request user is not know, only the organization is know
+  usr.Username     := IvUsername;     // also these info are empty until user has been
+//usr.Password     := wre.Password;   // successfully logged-in with authentication
+//Result := usr.DbaSelect(wre.Username, IvFbk);
+
+  // session       WARNING: a session should be created when the user supply username+password, so during a successful login
+//Result := ses.DbaNewAndSet(usr.Organization, usr.Username, usr.Password, IvFbk);
+
+  // organization
+  Result := org.DbaSelect(IvOrganization, IvFbk);
+
+  // smtp
+  smt.Organization  := IvOrganization; // smtp is ok since 1st request because it is tied to organization
+  Result := smt.DbaSelect(IvFbk);
+
+  // pop3
+  pop.Organization  := IvOrganization; // pop3 is ok since 1st request because it is tied to organization
+  Result := pop.DbaSelect(IvFbk);
+
+  // member
+  mbr.Organization  := IvOrganization; // also member is not know at 1st request
+  mbr.Member        := IvUsername;
+  Result := mbr.DbaSelect(IvFbk);
+
+  // fbklog
+  IvFbk := 'All records sys, usr, ses, org, smt, pop, mbr initialized from database';
+end;
+
+function TAllRec.AllRecordRioInit(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
+begin
+  // move here all stuff that is actually in wksloginform
+  IvFbk  := NOT_IMPLEMENTED_STR;
+  Result := false;
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
+end;
+
+function TAllRec.BeforeDispatch(IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
+var
+  k: string;
+  v: variant;
+begin
+
+  {$REGION 'WebRequestExtended'}
+  {Result :=} wre.Init(IvWebRequest);
+//  lg.I('Initialized', 'BEFOREDISPATCH WEBREQUESTEXTENDED'); // TRecHlp<TWreRec>.FieldsToJson(wre)
+  {$ENDREGION}
+
+  {$REGION 'F I N A L L Y - ALL-RECORDS-INITIALIZATIONS-FROM-DBA'}
+  Result := all.AllRecordDbaInit(wre.UserOrganization, wre.Username, IvFbk);
+//  lg.I(IvFbk, 'BEFOREDISPATCH ALL-REC-INIT-FROM-DBA');
+  {$ENDREGION}
+
+  {$REGION 'WebServer'}
+//Result := srv.Init(sys.ADMIN_CSV, wre.Host, IntToStr(wre.ServerPort), IvOtpIsActive, IvAuditIsActive, IvFbk);
+//if not Result then begin
+//  lg.W(IvFbk, 'ISAPIWEBMODULE BEFOREDISPATCH WEBSERVER WARNING');
+//  Exit;
+//end;
+//lg.I(TRecHlp<TSrvRec>.FieldsToJson(srv), 'ISAPIWEBMODULE BEFOREDISPATCH WEBSERVER');
+  {$ENDREGION}
+
+  {$REGION 'Otp'}
+  (*
+  if not IvOtpIsActive then
+//    lg.I('Disabled', 'BEFOREDISPATCH OTP')
+  else begin
+    if wre.Otp.IsEmpty then begin
+//      lg.I('Enabled but empty (this should be the 1st request, so a new one has been generated and saved back to the client browser, ready for the next requests)', 'BEFOREDISPATCH OTP');
+      wre.Otp := otq.New;
+      v := wre.Otp;
+      cok.Write(IvWebResponse, 'CoOtp', v, k); // writes to client browser a cookie with a fresh otp, 1st request
+    end else begin
+//      lg.I('Enabled and not empty (this should be a request after the 1st one, carring the otp written during the 1st request', 'BEFOREDISPATCH OTP');
+      Result := otq.Validate(StrToInt(wre.Otp), IvFbk); // 4+4 seconds tolerance
+      if not Result then begin
+        IvWebResponse.SendRedirect('/');
+//        lg.I('Not valid, ' + IvFbk, 'BEFOREDISPATCH OTP');
+      end else
+//        lg.I('Ok, ' + IvFbk, 'BEFOREDISPATCH OTP');
+    end;
+  end;
+  *)
+  {$ENDREGION}
+
+end;
+
+function TAllRec.AfterDispatch(IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
+begin
+  Result := true;
+
+  {$REGION 'TimersStop'}
+  wre.TimingMs := --wa0.ElapsedMilliseconds; // final total time, for partial timing use wa0.ElapsedMilliseconds no, use local
+//  lg.I(wre.TimingMs.ToString + ' ms', 'AFTERDISPATCH TIMING');
+  {$ENDREGION}
+
+  {$REGION 'FinalContent'}
+  if obj.DbaSwitchGet('System', 'ShowRenderingTime', true) then
+    IvWebResponse.Content := str.Replace(IvWebResponse.Content, '$RenderingTime$', htm.DivTiming(wre.TimingMs))
+  else
+    IvWebResponse.Content := str.Remove(IvWebResponse.Content, '$RenderingTime$');
+  {$ENDREGION}
+
+  {$REGION 'RequestLog'}
+  if IvAuditIsActive then
+    wre.DbaInsert(IvFbk); // can save a request even if the user is not logged in? may be using a sessionid created anyway? so all request in the same session might be clustered
+  {$ENDREGION}
+
+end;
 {$ENDREGION}
 
 {$REGION 'TAskRec'}
@@ -2360,7 +3241,7 @@ end;
 {$REGION 'TBynRec'}
 function TBynRec.AuthToken: string;
 begin
-  Result := str.Expande(byn.Nick, '.');
+  Result := str.Expande(Nick, '.');
 end;
 
 function TBynRec.Cmds: string;
@@ -2508,11 +3389,11 @@ end;
 
 function TBynRec.RioVerIsOk(var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
   try
 //    Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapClientVersionIsOk(Tag, Ver, IvFbk);
-  except
-    IvFbk := 'Unable to verify current version';
-    Result := false;
+  finally
+    Screen.Cursor := crDefault;
   end;
 end;
 
@@ -2532,6 +3413,7 @@ begin
   else if n.Contains('ServiceProject') then Result := 'Demon'       // Demon
 //else if n.Contains('AppProject'    ) then Result := 'Application' // standalone
   else if n.Contains('UtilProject'   ) then Result := 'Utility'     // utility standalone app
+  else if n.Contains('UtilsProject'  ) then Result := 'Utility'     // utility standalone app
   else if n.Contains('DemoProject'   ) then Result := 'Demo'        // standalone, to test ctrls or comps
   else if n.Contains('TestProject'   ) then Result := 'Test'        // standalone, to dtest unit
   else begin                                Result := 'Unknown';
@@ -2579,15 +3461,15 @@ end;
 
 function TBynRec.Tag: string;
 begin
-  Result := byn.Nick;
+  Result := Nick;
 end;
 
 function TBynRec.Ver(IvFile: string): string;
 begin
-//  if str.Nx(IvFile) then
-//    Result := fsy.FileVer(Spec)
-//  else
-//    Result := fsy.FileVer(IvFile);
+  if iis.Nx(IvFile) then
+    Result := fsy.FileVer(Spec)
+  else
+    Result := fsy.FileVer(IvFile);
 end;
 
 procedure TBynRec.Version(var IvV1, IvV2, IvV3, IvV4: word);
@@ -2943,6 +3825,961 @@ begin
   + ';Encrypt='  + 'No'
   ;
 end;
+{$ENDREGION}
+
+{$REGION 'TCodRec'}
+function TCodRec.CsvStr: string;
+var
+  v: TStringVector;
+  i: integer;
+begin
+  v := Vector;
+  for i := Low(v) to High(v) do
+    Result := Result + ',' + v[i];
+  Delete(Result, 1, 1);
+end;
+
+function TCodRec.DbaCode(IvDba: TDbaCls; IvId: integer; var IvBlocs: integer; var IvType, IvCode, IvFbk: string): boolean;
+var
+  ds: TDataSet;
+  sb: TSbuRec;
+  id, pi, zo: integer;
+  ki, cn, co{, cm, mi, jo}, ra, mt{, od, on}, a, b, c, d: string;
+begin
+
+  {$REGION 'Query'}
+  Result := IvDba.HTreeDs('DbaCode.dbo.TblCode', 'FldCode', 'FldKind, FldContent, FldReturnAs, FldMimeType', IvId, ds, IvFbk, 'FldState=''Active''');
+  if not Result then
+    Exit;
+  IvBlocs := ds.RecordCount;
+  {$ENDREGION}
+
+  {$REGION 'Validate'}
+  Result := IvBlocs >= 1;
+  if not Result then begin
+    IvFbk := Format('Unable to get library for CoLibraryId = %d, dataset is empty', [id]);
+    Exit;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'Root'}
+  id := ds.FieldByName('FldId'            ).AsInteger;
+  pi := ds.FieldByName('FldPId'           ).AsInteger;
+  zo := ds.FieldByName('FldOrder'         ).AsInteger;
+  ki := ds.FieldByName('FldKind'          ).AsString ;
+//st := ds.FieldByName('FldState'         ).AsString ;
+//cr := ds.FieldByName('FldCreated'       ).AsString ;
+//up := ds.FieldByName('FldUpdated'       ).AsString ;
+//oo := ds.FieldByName('FldOrganization'  ).AsInteger;
+//ow := ds.FieldByName('FldOwner'         ).AsString ;
+  cn := ds.FieldByName('FldCode'          ).AsString ;
+  co := ds.FieldByName('FldContent'       ).AsString ;
+//jo := ds.FieldByName('FldJson'          ).AsString ;
+//cm := ds.FieldByName('FldCompiled'      ).AsString ;
+//mi := ds.FieldByName('FldMinimized'     ).AsString ;
+  ra := ds.FieldByName('FldReturnAs'      ).AsString ;
+  mt := ds.FieldByName('FldMimeType'      ).AsString ;
+//od := ds.FieldByName('FldOutputDir'     ).AsString ;
+//on := ds.FieldByName('FldOutputFileName').AsString ;
+//rc := ds.FieldByName('FldRunCommand'    ).AsString;
+  {$ENDREGION}
+
+  {$REGION 'Other'}
+  // type
+  IvType := iif.Str(IvBlocs = 1, 'CODE', 'LIBRARY');
+
+  // comment
+       if ki = cod.BAT_KIND       then c := '::' // *** WARNING, POTENTIALLY INCOMPLETE ***
+  else if ki = cod.CSS_KIND       then c := ''
+  else if ki = cod.CSV_KIND       then c := ''
+  else if ki = cod.DWS_KIND       then c := '//'
+  else if ki = cod.ETL_KIND       then c := '--'
+  else if ki = cod.ETL_SQL_KIND   then c := '--'
+  else if ki = cod.ETL_MONGO_KIND then c := ''
+  else if ki = cod.HTML_KIND      then c := ''
+  else if ki = cod.ISS_KIND       then c := ';;'
+  else if ki = cod.JAVA_KIND      then c := '//'
+  else if ki = cod.JS_KIND        then c := '//'
+  else if ki = cod.JSON_KIND      then c := ''
+  else if ki = cod.PAS_KIND       then c := '//'
+  else if ki = cod.PY_KIND        then c := '##'
+  else if ki = cod.R_KIND         then c := '##'
+  else if ki = cod.SQL_KIND       then c := '--'
+  else if ki = cod.XML_KIND       then c := ''
+  else if ki = cod.TXT_KIND       then c := ''
+  else if ki = cod.INI_KIND       then c := ';;' // ???
+  ;
+  {$ENDREGION}
+
+  {$REGION 'Build'}
+  // head
+if c <> '' then begin
+  a := Format('%s   %s', [IvType, cn]);
+  b := Format('(id:%d, pid:%d, ord:%d)', [id, pi, zo]);
+  d := StringOfChar(c.Chars[0], 80);
+  sb.Add(d, 0);
+  sb.Fmt('%s %-40s%37s', [c, a, b]);
+  sb.Add(d);
+  sb.Emp;
+end;
+
+  // rootadd
+  sb.Add(Trim(co));
+  // next
+  ds.Next;
+
+  // childsaddifany
+  while not ds.Eof do begin
+    // item
+    id := ds.FieldByName('FldId'     ).AsInteger;
+    pi := ds.FieldByName('FldPId'    ).AsInteger;
+    zo := ds.FieldByName('FldOrder'  ).AsInteger;
+    cn := ds.FieldByName('FldCode'   ).AsString;
+    co := ds.FieldByName('FldContent').AsString;
+
+    // append
+  if c <> '' then begin
+    a := Format('B L O K   %s', [cn]);
+    b := Format('(id:%d, pid:%d, ord:%d)', [id, pi, zo]);
+    sb.Emp;
+    sb.Emp;
+    sb.Fmt('%s %-35s%42s', [c, a, b]);
+    sb.Add(d);
+  end;
+    sb.Add(Trim(co));
+
+    ds.Next;
+  end;
+
+  // tail
+if c <> '' then begin
+  sb.Emp;
+  a := Format('END', [cn]);
+  b := Format('(generated by wks @ %s in %d ms)', [DateTimeToStr(Now), {FWat.Elapsed.Milliseconds}-1]); // *** no, use local ***
+  sb.Add(d);
+  sb.Fmt('%s %-20s%57s', [c, a, b]);
+  sb.Add(d);
+end;
+
+  // library
+//  IvCode := rva.Rv(sb.Text);
+  {$ENDREGION}
+
+end;
+
+function TCodRec.RioCode(IvId: integer; var IvBlocs: integer; var IvType, IvCode, IvFbk: string): boolean;
+begin
+  Screen.Cursor := crHourGlass;
+  try
+  // TEMPORARYCOMMENT
+//  Result := (rio.HttpRio('Code') as ICodeSoapMainService).CodeRioCode(IvId, IvBlocs, IvType, IvCode, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+function TCodRec.Vector: TStringVector;
+begin
+  Result := [
+    BAT_KIND
+  , CSS_KIND
+  , CSV_KIND
+  , DWS_KIND
+  , ETL_KIND
+  , ETL_SQL_KIND
+  , ETL_MONGO_KIND
+  , HTML_KIND
+  , ISS_KIND
+  , JAVA_KIND
+  , JS_KIND
+  , JSON_KIND
+  , PAS_KIND
+  , PY_KIND
+  , R_KIND
+  , SQL_KIND
+  , XML_KIND
+  , TXT_KIND
+  , INI_KIND
+  ];
+end;
+{$ENDREGION}
+
+{$REGION 'TColRec'}
+
+  {$REGION 'Help'}
+{
+  DEFINITIONS
+  ===========
+  - hue is a color like red, blue, orange, ...
+
+  SHADE and TINT
+  ==============
+  - shade is produced by "darkening" a hue or "adding black"
+  - tint is produced by "ligthening" a hue or "adding white"
+
+  in RGB
+  ------
+    To shade:
+    newR = currentR * (1 - shade_factor)
+    newG = currentG * (1 - shade_factor)
+    newB = currentB * (1 - shade_factor)
+
+    To tint:
+    newR = currentR + (255 - currentR) * tint_factor
+    newG = currentG + (255 - currentG) * tint_factor
+    newB = currentB + (255 - currentB) * tint_factor
+
+    More generally, the color resulting in layering a color RGB(currentR,currentG,currentB) with a color RGBA(aR,aG,aB,alpha) is:
+    newR = currentR + (aR - currentR) * alpha
+    newG = currentG + (aG - currentG) * alpha
+    newB = currentB + (aB - currentB) * alpha
+
+    where (aR,aG,aB) = black = (0,0,0) for shading
+      and (aR,aG,aB) = white = (255,255,255) for tinting
+
+   in HSV or HSB
+   -------------
+     To shade: lower the Value / Brightness or increase the Saturation
+     To tint: lower the Saturation or increase the Value / Brightness
+
+   in HSL
+   ------
+     To shade: lower the Lightness
+     To tint: increase the Lightness
+
+
+  delphi color format
+  -------------------
+  TColor type is an integer whose bits contain the actual RGB values like this ssBBGGRR
+
+  TColor internal format can have five formats:
+  1. $00bbggrr -- Create using the RGB function
+  2. $010000nn -- Create using the PaletteIndex function
+  3. $02bbggrr -- Create using the PaletteRGB function
+  4. $800000nn -- Defined in Graphics.pas using Windows constants like COLOR_SCOLLBAR, etc
+                  these negative values must be passed to the ColorToRGB function  to have R, G and B
+  5. $FFFFFFFF -- if you create a TBitmap and do not define its height and width,
+                  the pixels value will be -1 ($FFFFFFFF) and may cause range-check errors
+
+  Warning about system colors
+  ---------------------------
+  There are special colors which are derived from the system colors (like button and window colors)
+  Those colors don't actually have valid RGB values
+  You can detect them by checking the first eight bits
+  If they are non-zero you have a special system color
+  You can also cast the color to an integer
+  If it is negative, it's a system color
+  In that case the R part contains the system color index
+
+  Color components extraction
+  ---------------------------
+  You can filter out the parts by doing a bit-wise and with 0xFF, while shifting the bits to the right:
+  R := Color and $FF;  G := (Color shr 8) and $FF;  B := (Color shr 16) and $FF;
+}
+  {$ENDREGION}
+
+  {$REGION 'Component'}
+function  TColRec.R(IvColor: TColor): byte;
+begin
+  Result := GetRValue(IvColor); // IvColor and $FF;
+end;
+
+function  TColRec.G(IvColor: TColor): byte;
+begin
+  Result := GetGValue(IvColor); // (IvColor shr 8) and $FF;
+end;
+
+function  TColRec.B(IvColor: TColor): byte;
+begin
+  Result := GetBValue(IvColor); // (IvColor shr 16) and $FF;
+end;
+
+function  TColRec.R(IvHColor: string): byte;
+begin
+  Result := GetRValue(FromHtml(IvHColor));
+end;
+
+function  TColRec.G(IvHColor: string): byte;
+begin
+  Result := GetGValue(FromHtml(IvHColor));
+end;
+
+function  TColRec.B(IvHColor: string): byte;
+begin
+  Result := GetBValue(FromHtml(IvHColor));
+end;
+
+function  TColRec.H(IvColor: TColor): double;
+var
+  h, s, l: word;
+begin
+  ToHSL(IvColor, h, s, l);
+  Result := h;
+end;
+
+function  TColRec.S(IvColor: TColor): double;
+var
+  h, s, l: word;
+begin
+  ToHSL(IvColor, h, s, l);
+  Result := s;
+end;
+
+function  TColRec.L(IvColor: TColor): double;
+var
+  h, s, l: word;
+begin
+  ToHSL(IvColor, h, s, l);
+  Result := l;
+end;
+  {$ENDREGION}
+
+  {$REGION 'Ops'}
+function  TColRec.Invert(IvColor: TColor): TColor;
+begin
+  raise Exception.Create('Error, function not implemented');
+//Result := clRed;
+end;
+
+function  TColRec.Lighten(IvColor: TColor; IvPercentage: integer): TColor;
+var
+  r: TColorRef;
+  h, s, l: word;
+begin
+  r := ToColorRef(IvColor);
+  ColorRGBToHLS(r, h, l, s);
+  l := (Cardinal(l) * (100 + IvPercentage)) div 100;
+  r := ColorHLSToRGB(h, l, s);
+  Result := r;
+end;
+
+function  TColRec.Darken(IvColor: TColor; IvPercentage: integer): TColor;
+var
+  r: TColorRef;
+  h, s, l: word;
+begin
+  r := ToColorRef(IvColor);
+  ColorRGBToHLS(r, h, l, s);
+  l := (Cardinal(l) * (100 - IvPercentage)) div 100;
+  r := ColorHLSToRGB(h, l, s);
+  Result := r;
+end;
+  {$ENDREGION}
+
+  {$REGION 'Grade'}
+function  TColRec.GradeBlue(IvGrade: byte): string;
+var
+  l, r, g, b, a: byte;
+begin
+  l := Round(-1 / 2 * IvGrade + $ff);
+  b := $ff;
+  g := 2 * l - $ff;
+  r := g;
+  a := $ff;
+
+  Result :=
+    IntToHex(r, 2) // red
+  + IntToHex(g, 2) // green
+  + IntToHex(b, 2) // blue
+  + IntToHex(a, 2) // alpha
+  ;
+end;
+
+function  TColRec.GradeGray(IvGrade: byte): string;
+var
+  l, r, g, b, a: byte;
+begin
+  l := $ff - IvGrade;
+  r := l;
+  g := r;
+  b := r;
+  a := $ff;
+
+  Result :=
+    IntToHex(r, 2) // red
+  + IntToHex(g, 2) // green
+  + IntToHex(b, 2) // blue
+  + IntToHex(a, 2) // alpha
+  ;
+end;
+
+function  TColRec.GradeGreen(IvGrade: byte): string;
+var
+  l, r, g, b, a: byte;
+begin
+  l := Round(-3 / 4 * IvGrade + $ff);
+  if l < $80 then begin
+    r := 0;
+    g := 2 * l;
+    b := 0;
+  end else begin
+    r := 2 * l - $ff;
+    g := $ff;
+    b := r;
+  end;
+  a := $ff;
+
+  Result :=
+    IntToHex(r, 2) // red
+  + IntToHex(g, 2) // green
+  + IntToHex(b, 2) // blue
+  + IntToHex(a, 2) // alpha
+  ;
+end;
+
+function  TColRec.GradeRed(IvGrade: byte): string;
+var
+  l, r, g, b, a: byte;
+begin
+  l := Round(-1 / 2 * IvGrade + $ff);
+  r := $ff;
+  g := 2 * l - $ff;
+  b := g;
+  a := $ff;
+
+  Result :=
+    IntToHex(r, 2) // red
+  + IntToHex(g, 2) // green
+  + IntToHex(b, 2) // blue
+  + IntToHex(a, 2) // alpha
+  ;
+end;
+  {$ENDREGION}
+
+  {$REGION 'Spectra'}
+function  TColRec.Rainbow(IvMin, IvMax, IvIdx: double): string;
+var
+  m: Double;
+  r, g, b, a, mt: byte;
+begin
+  m := (IvIdx - IvMin) / (IvMax - IvMin + 1) * 6;
+  mt := (Round(Frac(m) * $FF));
+  case Trunc(m) of
+  0: begin
+      r := $ff;
+      g := mt;
+      b := 0;
+      a := $ff;
+    end;
+  1: begin
+      r := $ff - mt;
+      g := $ff;
+      b := 0;
+      a := $ff;
+    end;
+  2: begin
+      r := 0;
+      g := $ff;
+      b := mt;
+      a := $ff;
+    end;
+  3: begin
+      r := 0;
+      g := $ff - mt;
+      b := $ff;
+      a := $ff;
+    end;
+  4: begin
+      r := mt;
+      g := 0;
+      b := $ff;
+      a := $ff;
+    end;
+  5: begin
+      r := $ff;
+      g := 0;
+      b := $ff - mt;
+      a := $ff;
+    end;
+  else begin
+      r := 0;
+      g := 0;
+      b := 0;
+      a := $ff;
+    end;
+  end;
+
+  Result :=
+    IntToHex(r, 2) // red
+  + IntToHex(g, 2) // green
+  + IntToHex(b, 2) // blue
+  + IntToHex(a, 2) // alpha
+  ;
+end;
+
+function  TColRec.Rainbow(MinHue, MaxHue, Hue: integer): TColor;
+begin
+  Result := Rainbow((Hue - MinHue) / (MaxHue - MinHue + 1));
+end;
+
+function  TColRec.Rainbow(Hue: double): TColor;
+var
+  h: THls;
+  c: TRGBTriple;
+begin
+//Hue := EnsureRange(Hue, 0, 1) * 6;
+//case Trunc(Hue) of
+//  0: Result := RGB(255                         , Round(Frac(Hue) * 255)      , 0                           );
+//  1: Result := RGB(255 - Round(Frac(Hue) * 255), 255                         , 0                           );
+//  2: Result := RGB(0                           , 255                         , Round(Frac(Hue) * 255)      );
+//  3: Result := RGB(0                           , 255 - Round(Frac(Hue) * 255), 255                         );
+//  4: Result := RGB(Round(Frac(Hue) * 255)      , 0                           , 255                         );
+//else
+//     Result := RGB(255                         , 0                           , 255 - Round(Frac(Hue) * 255));
+//end;
+
+  // or
+  h.H := Round(Hue * HLS_MAX);
+  h.L := HLS_MAX div 2;
+  h.S := HLS_MAX;
+  c := HLStoRGB(h);
+  Result := RGB(c.rgbtRed, c.rgbtGreen, c.rgbtBlue);
+end;
+
+procedure TColRec.RainbowToRgb(const fraction: double; var R, G, B: byte);
+const
+  WAVELENGTH_MINIMUM = 380;  // nanometers
+  WAVELENGTH_MAXIMUM = 780;
+var
+  w: TNanometer; // wavelength
+begin
+  w := WAVELENGTH_MINIMUM + fraction*(WAVELENGTH_MAXIMUM - WAVELENGTH_MINIMUM);
+  if   w < WAVELENGTH_MINIMUM
+  then w := WAVELENGTH_MINIMUM;
+
+  if   w > WAVELENGTH_MAXIMUM
+  then w := WAVELENGTH_MAXIMUM;
+
+  WavelengthToRgb(w, R, G, B)
+end;
+
+procedure TColRec.WavelengthToRgb(const Wavelength: TNanometer; var R, G, B: byte);
+const
+  Gamma        = 0.80;
+  IntensityMax = 255;
+var
+  Blue  : double;
+  Green : double;
+  Red   : double;
+  Factor: double;
+
+  function  Adjust(const Color, Factor: double): integer;
+  begin
+    if   Color = 0.0
+    then Result := 0     // Don't want 0^x = 1 for x <> 0
+    else Result := Round(IntensityMax * Power(Color * Factor, Gamma))
+  end;
+
+begin
+  case trunc(Wavelength) of
+    380..439: begin
+      Red   := -(Wavelength - 440) / (440 - 380);
+      Green := 0.0;
+      Blue  := 1.0
+    end;
+    440..489: begin
+      Red   := 0.0;
+      Green := (Wavelength - 440) / (490 - 440);
+      Blue  := 1.0
+    end;
+    490..509: begin
+      Red   := 0.0;
+      Green := 1.0;
+      Blue  := -(Wavelength - 510) / (510 - 490)
+    end;
+    510..579: begin
+      Red   := (Wavelength - 510) / (580 - 510);
+      Green := 1.0;
+      Blue  := 0.0
+    end;
+    580..644: begin
+      Red   := 1.0;
+      Green := -(Wavelength - 645) / (645 - 580);
+      Blue  := 0.0
+    end;
+    645..780: begin
+      Red   := 1.0;
+      Green := 0.0;
+      Blue  := 0.0
+    end;
+    else begin
+      Red   := 0.0;
+      Green := 0.0;
+      Blue  := 0.0;
+    end;
+  end;
+
+  // let the intensity fall off near the vision limits
+  case trunc(Wavelength) of
+    380..419: factor := 0.3 + 0.7*(Wavelength - 380) / (420 - 380);
+    420..700: factor := 1.0;
+    701..780: factor := 0.3 + 0.7*(780 - Wavelength) / (780 - 700)
+    else      factor := 0.0
+  end;
+
+  R := Adjust(Red,   Factor);
+  G := Adjust(Green, Factor);
+  B := Adjust(Blue,  Factor);
+end;
+  {$ENDREGION}
+
+  {$REGION 'FromTo'}
+function  TColRec.ToColorRef(IvColor: TColor): TColorRef;
+begin
+  if IvColor < 0 then
+    Result := GetSysColor(IvColor and $000000FF)
+  else
+    Result := IvColor; // ColorToRGB()
+end;
+
+procedure TColRec.ToRGB(const IvColor: TColor; out R, G, B: byte);
+begin
+  R :=  IvColor         and $FF;
+  G := (IvColor shr  8) and $FF;
+  B := (IvColor shr 16) and $FF;
+end;
+
+function  TColRec.FromRGB(const R, G, B: byte): TColor;
+begin
+  Result := R or (G shl 8) or (B shl 16);
+end;
+
+procedure TColRec.ToHSL(const IvColor: TColor; out H, S, L: word);
+var
+  r: TColorRef;
+begin
+  r := ToColorRef(IvColor);
+  ColorRGBToHLS(r, H, L, S);
+end;
+
+function  TColRec.FromHSL(const H, S, L: word): TColor;
+var
+  r: TColorRef;
+begin
+  r := ColorHLSToRGB(H, L, S);
+  Result := r;
+end;
+
+function  TColRec.ToHtml(IvColor: TColor): string;
+var
+  c: TColorRef;
+begin
+  c := ColorToRGB(IvColor);
+  Result := Format('#%.2x%.2x%.2x', [GetRValue(c), GetGValue(c), GetBValue(c)]).ToLower;
+end;
+
+function  TColRec.FromHtml(IvHColor: string; IvDefault: TColor): TColor;
+begin
+  if copy(IvHColor, 1, 1) <> '#' then
+    IvHColor := '#' + IvHColor;
+  IvHColor := '$' + copy(IvHColor, 6, 2) + copy(IvHColor, 4, 2) + copy(IvHColor, 2, 2); // $bbggrr
+  try
+    Result := StringToColor(IvHColor);
+  except
+    Result := IvDefault;
+  end;
+end;
+
+
+function  TColRec.RGB2BGR(IvRGBColor: TColor): TColor;
+var
+  r, g, b: integer;
+begin
+//Result := (Integer(B) shl 16) + (Integer(G) shl 8) + R;
+  r :=   IvRGBColor div $10000                  ;
+  g := ((IvRGBColor mod $10000) div $100) shl  8;
+  b :=  (IvRGBColor mod $100  )           shl 16;
+  Result := b + g + r;
+end;
+
+function  TColRec.BGR2RGB(IvBGRColor: TColor): TColor;
+var
+  r, g, b: integer;
+begin
+  r := IvBGRColor and $FF0000 shr 16;
+  g := IvBGRColor and $00FF00       ;
+  b := IvBGRColor and $0000FF shl 16;
+  Result := r + g + b;
+end;
+
+function  TColRec.RgbToHls(IvRgb: TRGBTriple): THls;
+var
+  lr, lg, lb, lh, ll, ls, lmin, lmax: double;
+begin
+  lr   := IvRgb.RgbtRed   / 256;
+  lg   := IvRgb.RgbtGreen / 256;
+  lb   := IvRgb.RgbtBlue  / 256;
+  lmin := Mat.Min3(lr, lg, lb);
+  lmax := Mat.Max3(lr, lg, lb);
+  LL := (LMax + LMin) / 2;
+  if LMin = LMax then begin
+    LH := 0;
+    LS := 0;
+    Result.H := round(LH * 256);
+    Result.L := round(LL * 256);
+    Result.S := round(LS * 256);
+    exit;
+  end;
+  if LL < 0.5 then
+    LS := (LMax - LMin) / (LMax + LMin)
+  else
+    LS := (LMax-LMin) / (2.0 - LMax - LMin);
+  if LR = LMax then
+    LH := (LG - LB)/(LMax - LMin)
+  else if LG = LMax then
+    LH := 2.0 + (LB - LR) / (LMax - LMin)
+  else
+    LH := 4.0 + (LR - LG) / (LMax - LMin);
+  Result.H := round(LH * 42.6);
+  Result.L := round(LL * 256);
+  Result.S := round(LS * 256);
+end;
+
+function  TColRec.HlsToRgb(IvHls: THls): TRGBTriple;
+var
+  LR, LG, LB, LH, LL, LS: double;
+  L1, L2: Double;
+begin
+  LH := IvHls.H / 255;
+  LL := IvHls.L / 255;
+  LS := IvHls.S / 255;
+  if LS = 0 then begin
+    Result.RgbtRed := IvHls.L;
+    Result.RgbtGreen := IvHls.L;
+    Result.RgbtBlue := IvHls.L;
+    Exit;
+  end;
+  if LL < 0.5 then
+    L2 := LL * (1.0 + LS)
+  else
+    L2 := LL + LS - LL * LS;
+  L1 := 2.0 * LL - L2;
+  LR := LH + 1.0/3.0;
+  if LR < 0 then
+    LR := LR + 1.0;
+  if LR > 1 then
+    LR := LR - 1.0;
+  if 6.0 * LR < 1 then
+    LR := L1+(L2 - L1) * 6.0 * LR
+  else if 2.0 * LR < 1 then
+    LR := L2
+  else if 3.0*LR < 2 then
+    LR := L1 + (L2 - L1) * ((2.0 / 3.0) - LR) * 6.0
+  else
+    LR := L1;
+  LG := LH;
+  if LG < 0 then
+    LG := LG + 1.0;
+  if LG > 1 then
+    LG := LG - 1.0;
+  if 6.0 * LG < 1 then
+    LG := L1+(L2 - L1) * 6.0 * LG
+  else if 2.0*LG < 1 then
+    LG := L2
+  else if 3.0*LG < 2 then
+    LG := L1 + (L2 - L1) * ((2.0 / 3.0) - LG) * 6.0
+  else
+    LG := L1;
+  LB := LH - 1.0/3.0;
+  if LB < 0 then
+    LB := LB + 1.0;
+  if LB > 1 then
+    LB := LB - 1.0;
+  if 6.0 * LB < 1 then
+    LB := L1+(L2 - L1) * 6.0 * LB
+  else if 2.0*LB < 1 then
+    LB := L2
+  else if 3.0*LB < 2 then
+    LB := L1 + (L2 - L1) * ((2.0 / 3.0) - LB) * 6.0
+  else
+    LB := L1;
+  Result.RgbtRed := round(LR * 255);
+  Result.RgbtGreen := round(LG * 255);
+  Result.RgbtBlue := round(LB * 255);
+end;
+
+function  TColRec.ToStr(IvColor: TColor): string;                               // to    'clRed'
+begin
+  Result := ColorToString(IvColor);
+end;
+
+function  TColRec.ToHexStr(IvColor: TColor): string;                            // to   '0000FF'
+begin
+  Result := ColorToString(IvColor);
+end;
+
+function  TColRec.ToHtmlHexStr(IvColor: TColor; IvPrefix: boolean): string;     // to   'FF0000'  or '#FF0000'
+begin
+  Result := Format('%.2x%.2x%.2x', [GetRValue(IvColor), GetGValue(IvColor), GetBValue(IvColor)]);
+  if IvPrefix then
+    Result := '#' + Result;
+end;
+
+function  TColRec.ToHtmlNameStr(IvColor: TColor): string;                       // to    red      or orangered
+var
+  i: integer;
+begin
+  Result := '';
+  try
+    // 1) try to find match in table to get html color name
+    for i := Low(TABLE) to High(TABLE) do
+      if TABLE[i].RGB = BGR2RGB(IvColor) then begin
+        Result := TABLE[i].Name;
+        Break;
+      end;
+
+    // 2) if no match convert rgb color to html hex color string
+    if Result = '' then
+      Result := '#' +
+        IntToHex(Byte(IvColor       ), 2)
+      + IntToHex(Byte(IvColor shr  8), 2)
+      + IntToHex(Byte(IvColor shr 16), 2);
+  except
+    Result := '#000000';
+  end;
+end;
+
+function  TColRec.FromStr(IvString: string): TColor;                            // from  cl+delphicolorname
+begin
+  Result := StringToColor('cl' + IvString);
+end;
+
+function  TColRec.FromHexStr(IvHexString, IvDefault: string): TColor;           // from '0000FF'
+var
+  s: string;
+begin
+  s := IvHexString;
+  if s = '' then
+    s := IvDefault;
+  if Length(s) < 6 then
+    s := s + StringOfChar('0', 6 - Length(s));
+  if Length(s) > 6 then
+    s := LeftStr(s, 6);
+//if Length(s) = 6 then
+  //s := s + '00';
+
+  try
+    Result := RGB(
+      StrToInt('$' + Copy(s, 1, 2)) // red value
+    , StrToInt('$' + Copy(s, 3, 2)) // green value
+    , StrToInt('$' + Copy(s, 5, 2)) // blue value
+    );
+  except
+    Result := FromHexStr(IvDefault); // if colorname is mispelled, like skyblu (should be skyblue), than 1) will not trigger and 2) will fail
+  end;
+end;
+
+function  TColRec.FromHtmlHexStr(IvHtmlHexString, IvDefault: string): TColor;   // from '#RRGGBB' or 'FF0000'
+var
+  x: string;
+begin
+  x := str.Right(IvHtmlHexString, 6);
+  Result := FromHexStr(x, IvDefault);
+end;
+
+function  TColRec.FromHtmlHexOrNameStr(IvHtmlNameString, IvDefault: string): TColor; // from  red      or orangered
+var
+  i, o: integer; // offset
+begin
+  Result := -1;
+  try
+    // 1) try to find match in table to get delphi tcolor
+    for i := Low(TABLE) to High(TABLE) do
+      if SameText(TABLE[i].Name, IvHtmlNameString) then begin
+        Result := RGB2BGR(TABLE[i].RGB);
+        Break;
+      end;
+
+    // 2) if no match convert html hex rgb color to delphi tcolor
+    if Result = -1 then begin       // check for leading '#'
+      if Copy(IvHtmlNameString, 1, 1) = '#' then
+        o := 1
+      else
+        o := 0;
+      Result :=
+        Integer(StrToInt('$' + Copy(IvHtmlNameString, o + 1, 2)))
+      + Integer(StrToInt('$' + Copy(IvHtmlNameString, o + 3, 2))) shl 8
+      + Integer(StrToInt('$' + Copy(IvHtmlNameString, o + 5, 2))) shl 16;
+    end;
+  except
+    Result := FromHtmlHexOrNameStr(IvDefault); // if colorname is mispelled, like skyblu (should be skyblue), than 1) will not trigger and 2) will fail
+  end;
+end;
+  {$ENDREGION}
+
+  {$REGION 'Utils'}
+function  TColRec.Blend(IvColor1, IvColor2: TColor; IvBlendingLevel: Byte): TColor;
+var
+  c1, c2: longint;
+  r, g, b, v1, v2: byte;
+begin
+  IvBlendingLevel := Round(2.55 * IvBlendingLevel);
+  c1 := ColorToRGB(IvColor1);
+  c2 := ColorToRGB(IvColor2);
+  v1 := Byte(c1);
+  v2 := Byte(c2);
+  r  := IvBlendingLevel * (v1 - v2) shr 8 + v2;
+  v1 := Byte(c1 shr 8);
+  v2 := Byte(c2 shr 8);
+  g  := IvBlendingLevel * (v1 - v2) shr 8 + v2;
+  v1 := Byte(c1 shr 16);
+  v2 := Byte(c2 shr 16);
+  b  := IvBlendingLevel * (v1 - v2) shr 8 + v2;
+  Result := (b shl 16) + (g shl 8) + r;
+end;
+  {$ENDREGION}
+
+  {$REGION 'Rnd'}
+function  TColRec.ColorAggRnd(IvStart: byte; IvAlpha: string): string;
+begin
+  Result := ToHexStr(ColorFineRnd(IvStart)) + IvAlpha;
+end;
+
+function  TColRec.ColorFineRnd(IvStart: byte): TColor;
+var
+  r: byte; // remaining
+begin
+  r := 255 - IvStart;
+  Result := Rgb(IvStart + Random(r), IvStart + Random(r), IvStart + Random(r));
+end;
+
+function  TColRec.ColorHexaRnd: string;
+begin
+  Result := ColorHexRnd + IntToHex(Random($ff), 2) // alpha
+end;
+
+function  TColRec.ColorHexRnd: string;
+begin
+  Result :=
+    IntToHex(Random($ff), 2) // red
+  + IntToHex(Random($ff), 2) // green
+  + IntToHex(Random($ff), 2) // blue
+end;
+
+function  TColRec.ColorHtmlRnd: string;
+begin
+  Result := '#808080';
+end;
+
+function  TColRec.ColorNameRnd: string;
+var
+  z, r: integer;
+begin
+  z := Length(TABLE);
+  r := Random(z);
+  Result := TABLE[r].Name;
+end;
+
+function  TColRec.ColorRnd: TColor;
+var
+  z, r: integer;
+begin
+  z := Length(TABLE);
+  r := Random(z);
+  Result := TABLE[r].RGB;
+end;
+  {$ENDREGION}
+
 {$ENDREGION}
 
 {$REGION 'TConRec'}
@@ -3608,7 +5445,7 @@ end;
 function TDbaCls.FldCreate(const IvTbl, IvFld: string; var IvFbk: string): boolean;
 begin
   Result := false;
-  IvFbk := NOT_IMPLEMENTED;
+  IvFbk := NOT_IMPLEMENTED_STR;
   //SqlFieldAdd(TableName, FieldName, FieldType, FieldSize);
 end;
 
@@ -3670,7 +5507,7 @@ end;
 function TDbaCls.FldExists(const IvTbl, IvFld: string; var IvFbk: string): boolean;
 begin
   Result := false;
-  IvFbk := NOT_IMPLEMENTED;
+  IvFbk := NOT_IMPLEMENTED_STR;
 {
 function  DbaFldExists(IvAdoTable: TADOTable; IvFld: string; var IvFbk: string): boolean;
 var
@@ -3910,7 +5747,7 @@ end;
 function TDbaCls.HIdVecFromName(const IvTbl, IvNameFld, IvName: string): TIntegerVector;
 begin
   Result := [-1];
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TDbaCls.HLevel(const IvTbl: string; const IvId: integer; var IvLevel: integer; var IvFbk: string): boolean;
@@ -4643,6 +6480,624 @@ begin
 end;
 {$ENDREGION}
 
+{$REGION 'TDstRec'}
+procedure TDstRec.Filter(IvDs: TDataSet; IvFilter, IvFieldToSearchCsv: string; IvActive: boolean; IvAdditionalExplicitFilter: string);
+var
+  a: boolean; // active
+  f: string; // filter
+  v: TStringVector;
+begin
+  // exit
+  if IvDs = nil then
+    Exit;
+  if not IvDs.Active then
+    Exit;
+  if IvFilter = '' then
+    Exit;
+
+  // safe
+  if (IvDs.State = dsEdit) or (IvDs.State = dsInsert) then
+    IvDs.Post;
+
+  // active filter
+  a := IvActive;
+  f := sql.Filter(IvFilter, IvFieldToSearchCsv, IvAdditionalExplicitFilter);
+  if iis.Nx(f) then
+    a := false;
+
+  // apply
+  IvDs.DisableControls;
+  try
+    if a then begin
+      IvDs.Filtered      := false;
+      IvDs.FilterOptions := [foCaseInsensitive]; // apparently option is not supported, probably it depend on the dbengine
+      IvDs.Filter        := f;
+      IvDs.Filtered      := true;
+    end else begin
+      IvDs.Filtered      := false;
+      IvDs.FilterOptions := [];
+      IvDs.Filter        := '';
+    end;
+  finally
+    IvDs.EnableControls;
+  end;
+
+  //IvDs.FilterOptions := [];
+  //IvDs.Filter := 'Product LIKE ''%' + txtFilter.Text + '%'''
+  //IvDs.Filter := 'UPPER(Product) LIKE ''%' + UPPERCASE(txtFilter.Text) + '%''';
+end;
+
+procedure TDstRec.FilterList(IvDs: TDataSet; IvFilter, IvFieldToSearchCsv, IvFieldToShowInList: string; IvStringList: TStrings);
+var
+  i: integer;
+  v: string;
+begin
+  // exit
+  if IvFilter = '' then
+    Exit;
+
+  // listload
+  IvDs.DisableControls;
+  try
+    IvDs.FilterOptions := [foCaseInsensitive];
+    IvDs.Filter := sql.Filter(IvFilter, IvFieldToSearchCsv);
+    IvDs.Filtered := true;
+    if IvDs.RecordCount > 0 then
+      IvStringList.Clear;
+    while not IvDs.Eof do begin
+      i := IvDs.FieldByName('FldId').AsInteger;
+      v := Format('%4d - %s', [i, IvDs.FieldByName(IvFieldToShowInList).AsString]);
+    //IvStringList.Add(v);                   // addthestring
+      IvStringList.AddObject(v, TObject(i)); // addthestringandtheid
+      IvDs.Next;
+    end;
+    IvDs.Filtered := false;
+    IvDs.Filter := '';
+  finally
+    IvDs.EnableControls;
+  end;
+end;
+
+procedure TDstRec.AppendJson(IvDs: TDataSet; IvSuperObject: superobject.ISuperObject);
+var
+  f: TField;
+  i: superobject.TSuperObjectIter;
+begin
+  IvDs.Append;
+  if superobject.ObjectFindFirst(IvSuperObject, i) then begin
+    try
+      repeat
+        f := IvDs.FindField(i.key);
+        if Assigned(f) then
+          FieldFromJson(f, i.val);
+      until not superobject.ObjectFindNext(i);
+    finally
+      superobject.ObjectFindClose(i);
+    end;
+  end;
+  IvDs.Post;
+end;
+
+function TDstRec.FieldCreate(IvDs: TDataSet; IvFieldType: TFieldType; const IvFld: string; IvSize, IvDisplayWidth: integer): TField;
+begin
+  Result := DefaultFieldClasses[IvFieldType].Create(IvDs);
+  Result.FieldName := IvFld;
+  if Result.FieldName = '' then
+    Result.FieldName:= 'Fld' + IntToStr(IvDs.FieldCount + 1);
+  Result.FieldKind := fkData;
+  Result.DataSet := IvDs;
+  Result.Name := IvDs.Name + Result.FieldName;
+  Result.Size := IvSize;
+  if (IvFieldType = ftString) then
+    Result.DisplayWidth := IvDisplayWidth;
+  if (IvFieldType = ftString) and (IvSize <= 0) then
+    raise Exception.CreateFmt('Size not defined for "%s"', [IvFld]);
+end;
+
+function TDstRec.DataSetFieldCreate(IvDs: TDataSet; const IvFld: string): TDataSetField;
+begin
+  Result := TDataSetField(FieldCreate(IvDs, ftDataSet, IvFld));
+end;
+
+procedure TDstRec.FieldFromJson(IvField: TField; IvValue: superobject.ISuperObject);
+var
+  n: string; // fieldname
+  d: TDataSet; // nesteddataset
+begin
+  n := IvField.FieldName;
+  case IvField.DataType of
+    ftSmallint
+  , ftinteger
+  , ftWord
+  , ftLargeint:          IvField.AsInteger  := IvValue.AsInteger;
+    ftFloat
+  , ftCurrency
+  , ftBCD
+  , ftFMTBcd:            IvField.AsFloat    := IvValue.AsDouble;
+    ftBoolean:           IvField.AsBoolean  := IvValue.AsBoolean;
+    ftDate
+  , ftTime
+  , ftDateTime
+  , ftTimeStamp:         IvField.AsDateTime := IvValue.AsDouble;
+    ftDataSet: begin
+      d := TDataSetField(IvField).NestedDataSet;
+      FromJson(d, IvValue); // nested
+    end;
+  //ftBytes, ftVarBytes: IvField.Value      := IvValue.AsArray;
+  //ftBlob:              IvField.Value      := IvValue.AsArray;
+  //ftMemo:              IvField.Value      := IvValue.AsString;
+  //ftGraphic:           IvField.Value      := IvValue.AsArray;
+    ftUnknown:           IvField.Value      := IvValue.AsString;
+  else
+                         IvField.AsString   := IvValue.AsString;
+  end;
+end;
+
+procedure TDstRec.FieldsFromJsonFields(IvDs: TDataSet; IvSuperObject: superobject.ISuperObject);
+var
+  i: superobject.TSuperObjectIter;
+  n: TDataSetField; // nestedfield
+  v: superobject.TSuperArray;
+begin
+  if SuperObject.ObjectFindFirst(IvSuperObject, i) then begin
+    try
+      repeat
+        //lg.I(i.key);
+        if (i.val.IsType(stArray)) then begin
+          n := DataSetFieldCreate(IvDs, i.key);
+          v := i.val.AsArray;
+          if (v.Length > 0) then
+            FieldsFromJsonFields(n.NestedDataSet, v[0]); // get just the 1st vector item to keep fields names ?
+        end else
+          FieldCreate(IvDs, sob.SuperTypeToFieldType(i.val.DataType), i.key, sob.SuperTypeToFieldSize(i.val.DataType));
+      until not superobject.ObjectFindNext(i);
+    finally
+      superobject.ObjectFindClose(i);
+    end;
+  end;
+end;
+
+function TDstRec.FieldToJson(IvField: TField; IvNoFld: boolean): string;
+var
+  v, n, q: string; // jsonvalue, fieldname
+begin
+  // fieldname
+  n := IvField.FieldName;
+  if IvNoFld then
+    Delete(n, 1, 3);
+
+  // jsonvalue
+  v := FieldValueToJsonValue(IvField);
+
+  // end
+  Result := '"' + n + '":' + v;
+end;
+
+function TDstRec.FieldValueToJsonValue(IvField: TField): string;
+var
+  n, v, e, q: string; // fieldname, fieldvalue, escaped, escapedandquoted
+begin
+  if IvField.IsNull then
+    Result := 'null'
+
+  else begin
+    v := IvField.AsString;
+    e := sob.StrEscape(v); //e := StringReplace(e, '\""', '\"', [rfReplaceAll]); // fix \"" --> \"
+    q := '"' + e + '"';
+
+    case IvField.DataType of
+      // bool
+      data.DB.ftBoolean         : Result := v;
+
+      // oid
+    //data.DB.ft???             : Result := '{"$oid":"5C0C5A6DA86A3024580003F1"} // --> "_id":{"$oid":"5C0C5A6DA86A3024580003F1"}
+
+      // guid
+      data.DB.ftGuid            : Result := AnsiQuotedStr(v, '"');
+
+      // integer
+      data.DB.ftByte
+    , data.DB.ftWord
+    , data.DB.ftLongWord
+    , data.DB.ftBCD
+    , data.DB.ftFMTBcd
+    , data.DB.ftInteger
+    , data.DB.ftAutoInc
+    , data.DB.ftSmallint
+    , data.DB.ftShortint
+    , data.DB.ftLargeint        : Result := IvField.Value;
+
+    // float
+      data.DB.ftFloat
+    , data.DB.ftSingle
+    , data.DB.ftCurrency
+    , data.DB.ftExtended        : Result := IvField.Value;
+
+      // ansistring
+      data.DB.ftFixedChar
+    , data.DB.ftString
+    , data.DB.ftMemo            : Result := q;
+
+      // string
+      data.DB.ftFixedWideChar
+    , data.DB.ftWideString
+    , data.DB.ftWideMemo        : Result := q;
+
+      // datetime
+      data.DB.ftDate
+    , data.DB.ftTime
+    , data.DB.ftDateTime
+    , data.DB.ftTimeStamp
+    , data.DB.ftTimeStampOffset : Result := '{"$date":'           + AnsiQuotedStr(DateToISO8601(IvField.AsDateTime, false), '"') + '}';
+
+      // bytes
+      data.DB.ftStream          : Result := AnsiQuotedStr('FTSTREAM'      + IvField.Value, '"');
+      data.DB.ftBlob            : Result := AnsiQuotedStr('FTBLOB'        + IvField.Value, '"');
+      data.DB.ftBytes           : Result := AnsiQuotedStr('FTBYTES'       + IvField.Value, '"');
+      data.DB.ftVarBytes        : SetString(Result, PChar(@IvField.AsBytes[0]), Length(IvField.AsBytes)); // try: ByteArrToStr or ByteArrToAscii
+      data.DB.ftGraphic         : Result := AnsiQuotedStr('FTGRAPHIC'     + IvField.Value, '"');
+      data.DB.ftTypedBinary     : Result := AnsiQuotedStr('FTTYPEDBINARY' + IvField.Value, '"');
+
+      // variant
+      data.DB.ftVariant         : Result := AnsiQuotedStr('FTVARIANT'     + IvField.Value, '"');
+
+      // unknown
+      data.DB.ftUnknown
+    , data.DB.ftADT
+    , data.DB.ftArray
+    , data.DB.ftConnection
+    , data.DB.ftCursor
+    , data.DB.ftDataSet
+    , data.DB.ftDBaseOle
+    , data.DB.ftFmtMemo
+    , data.DB.ftIDispatch
+    , data.DB.ftInterface
+    , data.DB.ftObject
+    , data.DB.ftOraBlob
+    , data.DB.ftOraClob
+    , data.DB.ftOraInterval
+    , data.DB.ftOraTimeStamp
+    , data.DB.ftParadoxOle
+    , data.DB.ftParams
+    , data.DB.ftReference       : Result := AnsiQuotedStr('FTUNKNOWN'     + IvField.Value, '"');
+    else
+                                  Result := q
+    end;
+  end;
+end;
+
+procedure TDstRec.FromJson(IvDs: TDataSet; IvJson: string);
+var
+  o: superobject.ISuperObject;
+begin
+  o := superobject.SO(IvJson);
+  FromJson(IvDs, o);
+end;
+
+procedure TDstRec.FromJson(IvDs: TDataSet; IvSuperObject: superobject.ISuperObject);
+var
+  i: integer;
+  v: superobject.TSuperArray;
+begin
+  //IvDs.DisableControls;
+  //try
+    if IvSuperObject.IsType(stArray) then begin
+      v := IvSuperObject.AsArray;
+      for i := 0 to v.Length-1 do begin
+        //lg.I(v.O[i].AsString, 'JSON');
+        AppendJson(IvDs, v.O[i]);
+      end;
+    end else
+      AppendJson(IvDs, IvSuperObject);
+  //finally
+    //IvDs.EnableControls;
+  //end;
+  //IvDs.First;
+end;
+
+procedure TDstRec.RecordDeleteSoft(IvDs: TDataSet; IvFieldToRenameAvailable: string);
+var
+  i: integer;
+begin
+  IvDs.Edit;
+  for i := 0 to IvDs.FieldCount - 1 do begin
+    if      SameText(IvDs.FieldDefs[i].Name, 'FldId') then
+      continue
+    else if SameText(IvDs.FieldDefs[i].Name, 'FldPId') then
+      IvDs.Fields[i].Value := vst.ZZZ_ID
+    else if SameText(IvDs.FieldDefs[i].Name, IvFieldToRenameAvailable) then
+      IvDs.Fields[i].Value := 'Available'
+    else
+      IvDs.Fields[i].Value := null;
+  end;
+  IvDs.Post;
+end;
+
+procedure TDstRec.RecordToFldAndValueVectors(IvDs: TDataSet; var IvFldVec: TStringVector; var IvValueVec: TVariantVector; IvNoFld: boolean);
+var
+  z, i: integer;
+begin
+  z := IvDs.FieldCount;
+  SetLength(IvFldVec, z);
+  SetLength(IvValueVec, z);
+  for i := 0 to z - 1 do begin
+    IvFldVec[i]   := IvDs.Fields[i].FieldName;
+    IvValueVec[i] := IvDs.Fields[i].Value;
+    if IvNoFld then
+      Delete(IvFldVec[i], 1, 3);
+  end;
+end;
+
+function TDstRec.RecordToJson(IvDs: TDataSet; IvNoFld, IvRowNoAdd: boolean): string; var
+  i: integer;
+  n: string;
+begin
+  // record
+  Result := '';
+  for i := 0 to IvDs.FieldCount-1 do
+    Result := Result + ',' + FieldToJson(IvDs.Fields[i], IvNoFld);
+  Delete(Result, 1, 1);
+
+  // rowno
+  if IvRowNoAdd then
+    n := iif.Str(IvNoFld, '"No":', '"FldNo":') + IntToStr(IvDs.RecNo) + ','
+  else
+    n := '';
+
+  // finalrow
+  Result := '{' + n + Result + '}';
+end;
+
+procedure TDstRec.RecordToJson(IvDs: TDataSet; var IvSuperObject: superobject.ISuperObject; IvNoFld, IvRowNoAdd: boolean);
+var
+  s: string;
+//j, j2: superobject.ISuperObject;
+begin
+  s := RecordToJson(IvDs, IvNoFld, IvRowNoAdd);
+
+  IvSuperObject := superobject.SO(s);
+
+  // or build like this
+//j := SO;
+//j.S['name'] := 'Henri Gourvest';            // string
+//j.B['vip'] := TRUE;                         // boolean
+//j.O['telephones'] := SA([]);                // object/array
+//j.A['telephones'].S[0] := '000000000';      // object/array
+//j.A['telephones'].S[1] := '111111111111';   // object/array
+//j.I['age'] := 33;                           // integer
+//j.D['size'] := 1.83;                        // float
+//j.O['addresses'] := SA([]);                 // object/array
+//  j2 := SO;
+//  j2.S['address'] := 'blabla';
+//  j2.S['city'] := 'Metz';
+//  j2.I['pc'] := 57000;
+//j.A['addresses'].Add(j2);
+//  j2.S['address'] := 'blabla';
+//  j2.S['city'] := 'Nantes';
+//  j2.I['pc'] := 44000;
+//j.A['addresses'].Add(j2);
+//j := nil;
+//j2 := nil;
+end;
+
+procedure TDstRec.ToCsv(IvDs: TDataSet; var IvCsv: string; IvNoFld, IvRowNoAdd, IvHeaderAdd: boolean);
+var
+  i: integer;
+  s: string;
+begin
+  // header field names (as columns)
+  if IvHeaderAdd then begin
+    s := '';
+    for i := 0 to IvDs.FieldCount - 1 do
+      s := s + ',' + IvDs.Fields[i].FieldName;
+    if IvRowNoAdd then
+      s := 'FldNo' + s
+    else
+      Delete(s, 1, 1);
+    if IvNoFld then
+      IvCsv := StringReplace(s, 'Fld', '', [rfReplaceAll])
+    else
+      IvCsv := s;
+  end;
+
+  // body field values
+  while not IvDs.Eof do begin
+    s := '';
+    for i := 0 to IvDs.FieldCount - 1 do
+      s := s + ',' + IvDs.Fields[i].AsString;
+    if IvRowNoAdd then
+      s := IntToStr(i) + s
+    else
+      Delete(s, 1, 1);
+      IvCsv := IvCsv + sLineBreak + s;
+
+    IvDs.Next;
+  end;
+
+  // remove 1st nl
+  if not IvHeaderAdd then
+    Delete(IvCsv, 1, 2);
+end;
+
+procedure TDstRec.ToTxt(IvDs: TDataSet; var IvTxt: string; IvNoFld, IvRowNoAdd, IvHeaderAdd: boolean);
+var
+  r, c: integer;
+  l: string;
+begin
+  IvTxt := '';
+  if IvDs.IsEmpty or (not Assigned(IvDs.Fields)) then
+    Exit;
+
+  // header
+  if IvHeaderAdd then begin
+    // line
+    l := '';
+    for c := 0 to IvDs.FieldCount-1 do
+      l := l + ', ' + str.QuoteDbl(IvDs.Fields[c].FieldName);
+
+    // fix
+    if IvNoFld then
+      Delete(l, 1, 3); //l := StringReplace(l, 'Fld', '', [rfReplaceAll]);
+    if IvRowNoAdd then
+      l := l + ', "No"';
+    Delete(l, 1, 2);
+
+    // stack
+    IvTxt := IvTxt + sLineBreak + l;
+  end;
+
+  // rows
+  r := 0;
+  IvDs.First;
+  while not IvDs.Eof do begin
+    // line
+    Inc(r);
+    l := '';
+    for c := 0 to IvDs.FieldCount-1 do
+      l := l + ', ' + str.QuoteDbl(IvDs.Fields[c].AsString);
+
+    // fix
+    if IvRowNoAdd then
+      l := l + ', ' + str.QuoteDbl(Format('%.*d', [Length(IntTostr(IvDs.RecordCount)), r]));
+    Delete(l, 1, 2);
+
+    // stack
+    IvTxt := IvTxt + sLineBreak + l;
+
+    // next
+    IvDs.Next;
+  end;
+
+  // end
+  IvDs.First;
+end;
+
+procedure TDstRec.ToHtml(IvDs: TDataSet; var IvHtml: string; IvNoFld, IvRowNoAdd, IvHeaderAdd: boolean);
+var
+  i: integer;
+  s: string;
+begin
+  // header field names (as columns)
+  if IvHeaderAdd then begin
+    s := '';
+    for i := 0 to IvDs.FieldCount - 1 do
+      s := s + ',' + IvDs.Fields[i].FieldName;
+    if IvRowNoAdd then
+      s := 'FldNo' + s
+    else
+      Delete(s, 1, 1);
+    if IvNoFld then
+      IvHtml := StringReplace(s, 'Fld', '', [rfReplaceAll])
+    else
+      IvHtml := s;
+  end;
+
+  // body field values
+  while not IvDs.Eof do begin
+    s := '';
+    for i := 0 to IvDs.FieldCount - 1 do
+      s := s + ',' + IvDs.Fields[i].AsString;
+    if IvRowNoAdd then
+      s := IntToStr(i) + s
+    else
+      Delete(s, 1, 1);
+      IvHtml := IvHtml + sLineBreak + s;
+
+    IvDs.Next;
+  end;
+
+  // remove 1st nl
+  if not IvHeaderAdd then
+    Delete(IvHtml, 1, 2);
+end;
+
+function TDstRec.ToJson(IvDs: TDataSet; var IvJson: string; IvNoFld, IvRowNoAdd: boolean): integer;
+begin
+  // init
+  Result := 0;
+  IvJson := '';
+
+  // first
+  if not IvDs.Bof then
+    IvDs.First;
+
+  // rows
+  while not IvDs.Eof do begin
+    IvJson := IvJson + ',' + RecordToJson(IvDs, IvNoFld, IvRowNoAdd);
+    IvDs.Next;
+    Inc(Result);
+  end;
+  IvDs.First;
+  if Length(IvJson) = 0 then
+    Exit;
+
+  //strip1stcomma
+  Delete(IvJson, 1, 1);
+end;
+
+procedure TDstRec.ToJsonKeyValue(IvDs: TDataSet; var IvJson: string; IvNoFld: boolean);
+var
+  o: boolean; // onefieldonly
+  k, v: string; // key, value
+begin
+  // init
+  IvJson := '';
+  o := IvDs.FieldCount < 2;
+
+  // exit
+//if o then
+  //Exit;
+
+  // first
+  if not IvDs.Bof then
+    IvDs.First;
+
+  // rows
+  while not IvDs.Eof do begin
+    k := IvDs.Fields[0].AsString;
+    if o then
+      v := k
+    else
+      v := IvDs.Fields[1].AsString;
+    IvJson := IvJson + ',' + Format('"%s": "%s"', [k, v]);
+    IvDs.Next;
+  end;
+  IvDs.First;
+
+  //strip1stcomma
+  if Length(IvJson) > 0 then
+    Delete(IvJson, 1, 1);
+
+  // keyvalue
+  IvJson := '{' + IvJson + '}'; // may returns {}
+end;
+
+procedure TDstRec.ToJsonTotalAndRows(IvDs: TDataSet; var IvJson: string; IvNoFld, IvRowNoAdd: boolean);
+var
+  z: integer;
+begin
+  // raw
+  z := ToJson(IvDs, IvJson, IvNoFld, IvRowNoAdd);
+
+  // total&rows
+  IvJson :=
+    '{'
+  +  '"total":' + IntToStr(z)
+  + ',"rows":[' + IvJson + ']'
+  + '}'
+  ;
+end;
+
+procedure TDstRec.ToJsonVector(IvDs: TDataSet; var IvJson: string; IvNoFld, IvRowNoAdd: boolean);
+begin
+  // raw
+  ToJson(IvDs, IvJson, IvNoFld, IvRowNoAdd);
+
+  // vector
+  IvJson := '[' + IvJson + ']';
+end;
+{$ENDREGION}
+
 {$REGION 'TFbkRec'}
 procedure TFbkRec.Add(IvString: string);
 begin
@@ -5074,6 +7529,1697 @@ begin
 end;
 {$ENDREGION}
 
+{$REGION 'THtmRec'}
+
+  {$REGION 'attr'}
+function THtmRec.AttrIdName(IvCo: string): string;
+begin
+  Result := iif.ExF(IvCo, ' id="%s" name="%s"', [IvCo, IvCo]);
+end;
+
+function THtmRec.AttrClasse(IvClassVec: array of string): string;
+var
+  i: integer;
+begin
+  if vec.Nx(IvClassVec) then
+    Result := ''
+  else begin
+    for i := Low(IvClassVec) to High(IvClassVec) do begin
+      if iis.Nx(IvClassVec[i]) then
+        continue;
+      Result := Result + ' ' + IvClassVec[i];
+    end;
+    if iis.Ex(Result) then
+      Result := Format(' class="%s"', [Result.Trim]);
+  end;
+end;
+
+function THtmRec.AttrStyle(IvValue: string): string;
+begin
+  Result := iif.ExF(IvValue, ' style="%s"', [IvValue]);
+end;
+
+function THtmRec.AttrPlaceholder(IvValue: string): string;
+begin
+  Result := iif.ExF(IvValue, ' placeholder="%s"', [IvValue]);
+end;
+  {$ENDREGION}
+
+  {$REGION 'elements'}
+function THtmRec.A(IvHref, IvText: string): string;
+begin
+  Result :=           sLineBreak + Format('<a href="%s">', [IvHref])
+                    + sLineBreak +   IvText
+                    + sLineBreak + '</a>';
+end;
+
+function THtmRec.A(IvHref, IvFormat: string; IvVec: array of TVarRec): string;
+begin
+  Result := A(IvHref, Format(IvFormat, IvVec));
+end;
+
+function THtmRec.B(IvN: integer): string;
+var
+  i: integer;
+begin
+  Result :='';
+  for i := 1 to IvN do
+    Result := Result + '<br>';
+end;
+
+function THtmRec.C(IvComment: string): string;
+begin
+  Result :=           sLineBreak + Format('<!-- %s -->', [IvComment])
+end;
+
+function THtmRec.H(IvLevel: integer; IvContent, IvClass: string): string;
+begin
+  Result :=           sLineBreak + Format('<h%d%s>', [IvLevel, AttrClasse([iif.NxD(IvClass, '')])]) // w3-text-theme
+                    + sLineBreak +   IvContent
+                    + sLineBreak + Format('</h%d>', [IvLevel]);
+end;
+
+function THtmRec.H(IvLevel: integer; IvFormat: string; IvVec: array of TVarRec; IvClass: string): string;
+begin
+  Result := H(IvLevel, Format(IvFormat, IvVec));
+end;
+
+function THtmRec.P(IvContent, IvClass: string): string;
+begin
+  Result :=           sLineBreak + Format('<p%s>', [AttrClasse([iif.NxD(IvClass, '')])]) // w3-text-theme
+                    + sLineBreak +   IvContent
+                    + sLineBreak + '</p>';
+end;
+
+function THtmRec.P(IvFormat: string; IvVec: array of TVarRec; IvClass: string): string;
+begin
+  Result := P(Format(IvFormat, IvVec), IvClass);
+end;
+
+function THtmRec.D(IvContent, IvClass, IvComment: string): string;
+begin
+  Result :=           sLineBreak + Format('<div%s>', [AttrClasse([IvClass])]) + iif.ExR(IvComment, C(IvComment))
+                    + sLineBreak +   IvContent
+                    + sLineBreak + '</div>' + iif.ExR(IvComment, C(IvComment + ' End'));
+end;
+
+function THtmRec.D(IvFormat: string; IvVec: array of TVarRec; IvClass, IvComment: string): string;
+begin
+  Result := D(Format(IvFormat, IvVec), IvClass, IvComment);
+end;
+
+function THtmRec.Container(IvContent, IvClass: string): string;
+begin
+  Result :=           sLineBreak + Format('<div class="w3-container"%s>', [AttrClasse([IvClass])])
+                    + sLineBreak +   IvContent
+                    + sLineBreak + '</div>';
+end;
+
+function THtmRec.Panel(IvContent, IvClass: string): string;
+begin
+  Result :=           sLineBreak + Format('<div class="w3-panel"%s>', [AttrClasse([IvClass])])
+                    + sLineBreak +   IvContent
+                    + sLineBreak + '</div>';
+end;
+
+function THtmRec.Accordion(IvContent, IvClass: string): string;
+begin
+  Result :=
+    sLineBreak + '<!-- Accordion -->'
+  + sLineBreak + '<div class="w3-card w3-round">'
+  + sLineBreak + '  <div class="w3-white">'
+
+  + sLineBreak + '    <button onclick="w3AccordionToggle(''CoAccordion1'')" class="w3-button w3-block w3-theme-l1 w3-left-align"><i class="fa fa-circle-o-notch fa-fw w3-margin-right"></i> My Groups</button>'
+  + sLineBreak + '    <div id="CoAccordion1" class="w3-hide w3-container">'
+  + sLineBreak + '      <p>Some text..</p>'
+  + sLineBreak + '    </div>'
+
+  + sLineBreak + '    <button onclick="w3AccordionToggle(''CoAccordion2'')" class="w3-button w3-block w3-theme-l1 w3-left-align"><i class="fa fa-calendar-check-o fa-fw w3-margin-right"></i> My Events</button>'
+  + sLineBreak + '    <div id="CoAccordion2" class="w3-hide w3-container">'
+  + sLineBreak + '      <p>Some other text..</p>'
+  + sLineBreak + '    </div>'
+
+  + sLineBreak + '    <button onclick="w3AccordionToggle(''CoAccordion3'')" class="w3-button w3-block w3-theme-l1 w3-left-align"><i class="fa fa-users fa-fw w3-margin-right"></i> My Photos</button>'
+  + sLineBreak + '    <div id="CoAccordion3" class="w3-hide w3-container">'
+  + sLineBreak + '      <div class="w3-row-padding">'
+  + sLineBreak + '        <br>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/353473.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/353992.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/353234.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/784629.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/810643.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/784479.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '      </div>'
+  + sLineBreak + '    </div>'
+
+  + sLineBreak + '  </div>'
+  + sLineBreak + '</div>'
+end;
+
+function THtmRec.Td(IvContent, IvClass: string): string;
+begin
+  Result :=                        Format('<td%s>', [AttrClasse([IvClass])])
+                                 +   IvContent
+                                 + '</td>';
+end;
+
+function THtmRec.Th(IvContent, IvClass: string): string;
+begin
+  Result :=                        Format('<th%s>', [AttrClasse([IvClass])])
+                                 +   IvContent
+                                 + '</th>';
+end;
+
+function THtmRec.Tc(IvContent, IvClass: string): string;
+begin
+  Result :=           sLineBreak + Format('<caption%s>', [AttrClasse([IvClass])])
+                                 +   IvContent
+                                 + '</caption>';
+end;
+
+function THtmRec.Tr(IvContent, IvClass: string): string;
+begin
+  Result :=           sLineBreak + Format('<tr%s>', [AttrClasse([IvClass])])
+                    + sLineBreak +   IvContent
+                    + sLineBreak + '</tr>';
+end;
+
+function THtmRec.Table(IvContent, IvClass, IvStyle, IvCo, IvCaption: string): string;
+var
+  c: string;
+begin
+  c := iif.NxD(IvClass, 'w3-table w3-bordered w3-small');
+  Result :=           sLineBreak + Format('<table%s%s%s>', [AttrClasse([c]), AttrStyle(IvStyle), AttrIdName(IvCo)])
+                                 +   IvCaption // iif.Str(IvCaption.Contains('/caption'), IvCaption, Tc(IvCaption))
+                                 +   IvContent
+                    + sLineBreak + '</table>';
+end;
+
+function THtmRec.TableResp(IvContent, IvClass, IvStyle, IvCo, IvCaption: string): string;
+begin
+  Result :=           sLineBreak + '<div class="w3-responsive">'
+                                 + Table(IvContent, IvClass, IvStyle, IvCo, IvCaption)
+                    + sLineBreak + '</div>';
+end;
+
+function THtmRec.Fa(IvIcon, IvStyle: string): string;
+begin
+  Result := Format('<i class="fa fa-%s"%s></i>', [IvIcon, AttrStyle(IvStyle)]);
+end;
+  {$ENDREGION}
+
+  {$REGION 'page'}
+function THtmRec.Html(IvDba: TDbaCls; IvTitle, IvContent, IvHead, IvCss, IvJs, IvHeader, IvFooter: string; IvContainerOn: boolean; IvBuilder: integer): string;
+var
+  b: TStringBuilder;
+  t: TTextWriter;
+  d: string; // debug
+begin
+  // trivialconcat
+  if IvBuilder = 0 then begin
+    d := ''; // 'Page assembled with trivial string concatenation'
+    Result :=                      '<!DOCTYPE html>'
+                    + sLineBreak + '<html lang="en-US">'
+                    + sLineBreak +    Head(IvTitle, IvHead, IvCss, IvJs)
+                    + sLineBreak + '<body>' // class="w3-theme"
+                    + sLineBreak +    SidebarLeft(IvDba, '')
+                    + sLineBreak +    SidebarRight(IvDba, '')
+                    + sLineBreak +   '<!-- MiddleBlock -->'
+                    + sLineBreak +   '<div id="CoMiddleBlock"' + ifthen(wre.BoolGet('CoSidebarLeftShow', false, true), ' style="margin-left:200px"') + '>'
+                    + sLineBreak +      Navbar(IvDba, '')
+                    + sLineBreak +      Header(IvHeader, d)
+                    + sLineBreak +      Content(IvContent, IvContainerOn)
+                    + sLineBreak +      Footer(IvDba, IvFooter, d)
+                    + sLineBreak +   '</div>'
+                    + sLineBreak +    BottomFixed()
+                    + sLineBreak +    BootScript
+                    + sLineBreak + '</body>'
+                    + sLineBreak + '</html>';
+
+    // stringbuilder
+  end else if IvBuilder = 1 then begin
+    d := ''; // 'Page assembled with stringbuilder'
+    b := TStringBuilder.Create;
+    try
+      b.Append('<!DOCTYPE html>');
+      b.Append('<html lang="en-US">');
+      b.Append(Head(IvTitle));
+      b.Append('<body class="w3-theme">');
+      b.Append(Navbar(IvDba, ''));
+      b.Append(Content(IvContent));
+      b.Append(Footer(IvDba, IvFooter, d));
+      b.Append(BootScript);
+      b.Append('</body>');
+      b.Append('</html>');
+      Result := b.ToString;
+    finally
+      b.Free;
+    end;
+
+  // textwriter
+//end else if IvBuilder = 2 then begin
+//  d := ''; // 'Page assembled with textwriter'
+//  t := TTextWriter.CreateOwnedStream;
+//  try
+//    t.AddString(StringToUTF8('<!DOCTYPE html>'));
+//    t.AddString(StringToUTF8('<html lang="en-US">'));
+//    t.AddString(StringToUTF8(Head(IvTitle)));
+//    t.AddString(StringToUTF8('<body class="w3-theme">'));
+//    t.AddString(StringToUTF8(Navbar));
+//    t.AddString(StringToUTF8(Content(IvContent)));
+//    t.AddString(StringToUTF8(Footer(IvFooter, d)));
+//    t.AddString(BootScript);
+//    t.AddString(StringToUTF8('</body>'));
+//    t.AddString(StringToUTF8('</html>'));
+//    Result := UTF8ToString(t.Text);
+//  finally
+//    t.Free;
+//  end;
+  end;
+
+  // rv
+  Result := rva.Rv(IvDba, Result);
+end;
+
+function THtmRec.Blank(IvDba: TDbaCls; IvTitle, IvContent: string): string;
+begin
+  Result :=                        '<!DOCTYPE html>'
+                    + sLineBreak + '<html lang="en-US">'
+                    + sLineBreak +    Head(IvTitle)
+                    + sLineBreak + '<body class="w3-theme">'
+                    + sLineBreak +    Content(IvContent)
+                    + sLineBreak + '</body>'
+                    + sLineBreak + '</html>';
+
+  // rv
+  Result := rva.Rv(IvDba, Result);
+end;
+
+function THtmRec.Head(IvTitle, IvHead, IvCss, IvJs: string): string;
+begin
+  Result :=           sLineBreak + '<!-- Head -->'
+                    + sLineBreak + '<head>'
+                    + sLineBreak + '<title>' + ifthen(false, sys.ACRONYM, org.Organization) + ' ' + IvTitle + '</title>'
+                    + sLineBreak + '<meta charset="UTF-8">'
+                    + sLineBreak + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                    + sLineBreak + '<meta name="description" content="Yield Management System - integrated framework for product yield enhancement with unified data collection, storage, analysis, classification, knowledge, sharing & decision support" />'
+                    + sLineBreak + '<meta name="author" content="puppadrillo" />'
+                    + sLineBreak + '<link rel="icon" href="' + org.IconUrl + '" type="image/png">'
+                    + sLineBreak + '<link rel="stylesheet" href="/Include/w3/w3.css">'
+                    + sLineBreak + '<link rel="stylesheet" href="/Include/w3/w3-theme-[RvSysParam(Theme, white)].css">' // white grey dark-grey blue-grey
+                  //+ sLineBreak + '<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans">'
+                  //+ sLineBreak + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@500&display=swap">'
+                  //+ sLineBreak + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap">'
+                    + sLineBreak + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Play&display=swap">'
+                    + sLineBreak + '<link rel="stylesheet" href="/Include/font-awesome/4.7.0/css/font-awesome.min.css">'
+                    + sLineBreak + '<link rel="stylesheet" href="/Include/wks/wks.css">'
+                    + sLineBreak + IvHead
+                    + sLineBreak + '<style>'
+                  //+ sLineBreak + 'html, body, h1, h2, h3, h4, h5 {font-family: "Open Sans", sans-serif}'
+                  //+ sLineBreak + 'html, body, h1, h2, h3, h4, h5 {font-family: "Inconsolata", monospace;}'
+                  //+ sLineBreak + 'html, body, h1, h2, h3, h4, h5 {font-family: "Roboto Mono", monospace;}'
+                    + sLineBreak + 'html, body, h1, h2, h3, h4, h5 {font-family: "Play", sans-serif;}'
+                    + sLineBreak + '</style>'
+                    + sLineBreak + IvCss
+                  //+ sLineBreak + '<script src="/Include/jquery/3.5.1/jquery.min.js"></script>'
+                    + sLineBreak + '<script src="/Include/canvasjs/2.3.1/canvasjs.min.js"></script>'
+                    + sLineBreak + '<script src="/Include/w3/w3.js"></script>'
+                    + sLineBreak + '<script src="/Include/wks/wks.js"></script>'
+                    + sLineBreak + '<script>'
+                    + sLineBreak + IvJs
+                    + sLineBreak + '</script>'
+                    + sLineBreak + '</head>';
+end;
+
+function THtmRec.Navbar(IvDba: TDbaCls; IvContent: string): string;
+var
+  a, b: string;
+begin
+//a := 'domBlockToggle(''CoSidebarLeft'')';
+  a := 'w3SidebarLeftToggle(''CoMiddleBlock'', ''CoSidebarLeft'', ''200px'')';
+  b := wre.ScriptName; // /WksIsapiProject.dll
+  Result :=           sLineBreak + '<!-- Navbar -->'
+                    + sLineBreak + '<div>' // class="w3-top"                            // w3-border-bottom w3-border-theme
+                    + sLineBreak + ' <div class="w3-bar w3-theme-d1 w3-left-align w3-large">'
+                    + sLineBreak + '  <a class="w3-bar-item w3-button w3-hide-medium w3-hide-large w3-right w3-padding-large w3-hover-white w3-large w3-theme-d2" href="javascript:void(0);" onclick="w3NavbarOpen()"><i class="fa fa-bars"></i></a>'
+                    + sLineBreak + '  <div class="w3-bar-item w3-button w3-hover-white w3-theme-d1">' // w3-padding-large  style="padding:4px 16px"
+                    + sLineBreak + '    <a href="javascript:void(0);" onclick="' + a + '"><img src="' + org.LogoUrl + '" alt="" class="w3-image" style="height:35px;"></a>'
+                  //+ sLineBreak + '    <a href="javascript:void(0);" onclick="pageReload()"><img src="' + sys.LOGO_URL + '" alt="" class="w3-image" style="height:18px"></a>'
+                    + sLineBreak + '  </div>'
+                    ;
+                  if obj.DbaSwitchGet('System', 'ShowNavIcons', false) then
+  Result := Result  + sLineBreak + '  <a href="' + b + '/Home" class="w3-bar-item w3-button w3-hide-small w3-padding-large w3-hover-white" title="Home"><i class="fa fa-home"></i></a>'
+                    + sLineBreak + '  <a href="' + b + '/Social" class="w3-bar-item w3-button w3-hide-small w3-padding-large w3-hover-white" title="Social"><i class="fa fa-paw"></i></a>'
+                    + sLineBreak + '  <a href="' + b + '/Account" class="w3-bar-item w3-button w3-hide-small w3-padding-large w3-hover-white" title="Account Settings"><i class="fa fa-user"></i></a>'
+                    + sLineBreak + '  <a href="' + b + '/News" class="w3-bar-item w3-button w3-hide-small w3-padding-large w3-hover-white" title="News"><i class="fa fa-globe"></i></a>'
+                    + sLineBreak + '  <a href="' + b + '/Message" class="w3-bar-item w3-button w3-hide-small w3-padding-large w3-hover-white" title="Messages"><i class="fa fa-envelope"></i></a>'
+                    + sLineBreak + '  <a href="' + b + '/Notification" class="w3-bar-item w3-button w3-hide-small w3-padding-large w3-hover-white" title="Notifications"><i class="fa fa-bell"></i><span class="w3-badge w3-right w3-small w3-green">3</span></a>'
+                  //+ sLineBreak + '  <div class="w3-dropdown-hover w3-hide-small">'
+                  //+ sLineBreak + '    <a href="' + b + '/Notification" class="w3-button w3-padding-large" title="Notifications"><i class="fa fa-bell"></i><span class="w3-badge w3-right w3-small w3-green">3</span></a>'
+                  //+ sLineBreak + '    <div class="w3-dropdown-content w3-card-4 w3-bar-block" style="width:300px">'
+                  //+ sLineBreak + '      <a href="#" class="w3-bar-item w3-button">One new friend request</a>'
+                  //+ sLineBreak + '      <a href="#" class="w3-bar-item w3-button">John Doe posted on your wall</a>'
+                  //+ sLineBreak + '      <a href="#" class="w3-bar-item w3-button">Jane likes your post</a>'
+                  //+ sLineBreak + '    </div>'
+                  //+ sLineBreak + '  </div>'
+                    ;
+                  if obj.DbaSwitchGet('System', 'ShowUserAvatar', false) then
+  Result := Result  + sLineBreak + '  <a href="javascript:void(0);" onclick="domBlockToggle(''CoSidebarRight'')" class="w3-bar-item w3-button w3-hide-small w3-right w3-hover-white" style="padding:4px 16px" title="' + wre.Username + '">'
+                    + sLineBreak + '    <img src="/User/G/giarussi/giarussi.png" alt="" class="w3-circle" style="height:43px;width:43px" alt="' + wre.Username + '">'
+                    + sLineBreak + '  </a>'
+                    ;
+  Result := Result  + sLineBreak + ' </div>'
+                    + sLineBreak + '</div>'
+                    + sLineBreak + '<!-- Navbar on small screens -->'
+                    + sLineBreak + '<div id="CoNavbar" class="w3-bar-block w3-theme-d2 w3-hide w3-hide-large w3-hide-medium w3-large">'
+                    + sLineBreak + '  <a href="#" class="w3-bar-item w3-button w3-padding-large">Link 1</a>'
+                    + sLineBreak + '  <a href="#" class="w3-bar-item w3-button w3-padding-large">Link 2</a>'
+                    + sLineBreak + '  <a href="#" class="w3-bar-item w3-button w3-padding-large">Link 3</a>'
+                    + sLineBreak + '  <a href="#" class="w3-bar-item w3-button w3-padding-large">My Profile</a>'
+                    + sLineBreak + '</div>'
+                    ;
+end;
+
+function THtmRec.SidebarLeft(IvDba: TDbaCls; IvContent: string): string;
+var
+  i, j, l, m: integer; // pageorgid, menuid, counter, menulev
+  a, c, k: string; // caption
+  d: TDataset;
+begin
+  // ids
+  i := IvDba.HIdFromPath('DbaPage.dbo.TblPage', 'FldPage', org.TreePath);
+  j := wre.IntGet('CoMenuId', -1);
+  if j = -1 then
+    j := i;
+
+  // ds
+  IvDba.HParentsItemChildsDs('DbaPage.dbo.TblPage', 'FldPage, FldMenu', j, d, k);
+
+  // skip
+  d.Next; // Root
+  d.Next; //   Organization
+  d.Next; //     A
+
+  // loop
+  m := 0;
+  for l := 3 to d.RecordCount - 1 do begin
+    c := iif.NxD(d.FieldByName('FldMenu').AsString, d.FieldByName('FldPage').AsString);
+
+    if d.FieldByName('FldState').AsString = sta.Active.Key then begin
+      if          m = 0 then begin
+        a := a + sLineBreak + Format('<a href="%s/Page?CoId=%d&CoMenuId=%d" class="w3-bar-item w3-button w3-theme-d2" style="padding:14px 8px 15px 8px">%s</a>', [
+          wre.ScriptName
+        , d.FieldByName('FldId').AsInteger
+        , d.FieldByName('FldId').AsInteger
+        , c
+        ]);
+        m := 1; // justonetime
+
+      end else if d.FieldByName('FldLevelRel').AsInteger <= 0 then begin
+        a := a + sLineBreak + Format('<a href="%s/Page?CoId=%d&CoMenuId=%d" class="w3-bar-item w3-button w3-theme-' + ifthen(d.FieldByName('FldLevelRel').AsInteger = 0, 'd2', 'd2') + '">%s</a>', [
+          wre.ScriptName
+        , d.FieldByName('FldId').AsInteger
+        , d.FieldByName('FldId').AsInteger
+        , c
+        ]);
+
+      end else begin
+        a := a + sLineBreak + Format('<a href="%s/Page?CoId=%d&CoMenuId=%d" class="w3-bar-item w3-button w3-theme-d1 w3-small" style="padding: 4px 16px">%s%s</a>', [
+          wre.ScriptName
+        , d.FieldByName('FldId').AsInteger
+        , iif.Int(d.FieldByName('FldChilds').AsInteger > 0, d.FieldByName('FldId').AsInteger, j)
+        , c
+        , ifthen(d.FieldByName('FldChilds').AsInteger > 0, '<i class="fa fa-caret-right w3-right"></i>', '')
+        ]);
+      end;
+    end;
+
+    d.Next;
+  end;
+
+  // html
+  Result :=           sLineBreak + '<!-- Sidebar Left -->' // w3-animate-left w3-card w3-border-right w3-border-theme
+                    + sLineBreak + '<div class="w3-sidebar w3-bar-block w3-theme-d1 w3-scrollbar wks-rtl" style="' + ifthen(wre.BoolGet('CoSidebarLeftShow', false, true), 'width:200px', 'display:none') + ';" id="CoSidebarLeft">'
+                                 + a
+                    + sLineBreak + '</div>';
+end;
+
+function THtmRec.SidebarRight(IvDba: TDbaCls; IvContent: string): string;
+const
+  S = 'width:16px;text-align:center;margin-right:16px';
+begin
+  Result :=            sLineBreak + '<!-- Sidebar Right -->'
+                     + sLineBreak + '<div class="w3-sidebar w3-bar-block w3-card w3-animate-right w3-theme-d1" style="display:none;right:0" id="CoSidebarRight">'
+                     + sLineBreak + '  <div style="margin: 0;padding: 14px 8px 15px 8px;float: left;">Shortcuts</div><button onclick="domBlockClose(''CoSidebarRight'')" class="w3-button w3-large w3-right">&times;</button>';
+  if wre.CookieGet('CoSession', '') = '1234' then
+    Result := Result + sLineBreak + '  <a href="' + wre.ScriptName + '/Logout" class="w3-bar-item w3-button">'       + Fa('sign-out', S) + 'Logout</a>'
+  else
+    Result := Result + sLineBreak + '  <a href="' + wre.ScriptName + '/Login" class="w3-bar-item w3-button">'        + Fa('sign-in' , S) + 'Login</a>';
+  Result := Result   + sLineBreak + '  <a href="' + wre.ScriptName + '/Home" class="w3-bar-item w3-button">'         + Fa('home'    , S) + 'Home</a>'
+                     + sLineBreak + '  <a href="' + wre.ScriptName + '/Social" class="w3-bar-item w3-button">'       + Fa('paw'     , S) + 'Social</a>'
+                     + sLineBreak + '  <a href="' + wre.ScriptName + '/Account" class="w3-bar-item w3-button">'      + Fa('user'    , S) + 'Account</a>'
+                     + sLineBreak + '  <a href="' + wre.ScriptName + '/News" class="w3-bar-item w3-button">'         + Fa('globe'   , S) + 'News</a>'
+                     + sLineBreak + '  <a href="' + wre.ScriptName + '/Message" class="w3-bar-item w3-button">'      + Fa('envelope', S) + 'Messages</a>'
+                     + sLineBreak + '  <a href="' + wre.ScriptName + '/Notification" class="w3-bar-item w3-button">' + Fa('bell'    , S) + 'Notifications</a>'
+                     + sLineBreak + '  <a href="' + wre.ScriptName + '/Info" class="w3-bar-item w3-button">'         + Fa('info'    , S) + 'Info</a>'
+                     + sLineBreak + '  <a href="' + wre.ScriptName + '/Test" class="w3-bar-item w3-button">'         + Fa('bug'     , S) + 'Test</a>'
+                     + sLineBreak + '</div>';
+end;
+
+function THtmRec.Content(IvContent: string; IvContainerOn: boolean): string;
+begin
+  Result :=           sLineBreak + '<!-- Content -->'
+                    + ifthen(IvContainerOn, sLineBreak + '<div class="w3-container w3-content" style="max-width:1900px">') // style="max-width:1400px;margin-top:50px" notice the margin-top !
+                    + sLineBreak + IvContent // Container()
+                    + ifthen(IvContainerOn, sLineBreak + '</div>');
+end;
+
+function THtmRec.Header(IvContent, IvDebug: string): string;
+begin
+  Result := IvContent;
+end;
+
+function THtmRec.Footer(IvDba: TDbaCls; IvContent, IvDebug: string): string;
+var
+  c: string;
+begin
+  c := rva.Rv(IvDba, IvContent); // because might be empty
+  Result := '';
+  if c <> ''       then Result :=
+                      sLineBreak + '<!-- Footer -->'
+                    + sLineBreak + '<footer class="w3-container w3-theme-d4 w3-padding-16">'
+                    + sLineBreak + '  <h5>' + IvContent + '</h5>'
+                    + sLineBreak + '</footer>';
+
+  if IvDebug <> '' then Result := Result
+                    + sLineBreak + '<footer class="w3-container w3-theme-d2">'
+                    + sLineBreak + '  <p>' + IvDebug + '</p>'
+                    + sLineBreak + '</footer>';
+
+  if obj.DbaSwitchGet('System', 'ShowPoweredBy', false) then Result := Result
+                    + sLineBreak + '<footer class="w3-container w3-theme-d1">'
+                    + sLineBreak + '  <p class="w3-center">Powered by <a href="' + sys.Url + '" target="_blank"> <img src="' + sys.IconUrl + '" alt="" class="w3-image" style="height:24px" title="' + sys.NAME + '"></a></p>'
+                    + sLineBreak + '</footer>';
+
+  Result := Result
+                    + sLineBreak + '<footer class="w3-container w3-theme-d1">'
+                    + sLineBreak + '  <p>$RenderingTime$</p>' // this will be replace at the very end in all.AfterDispatch
+                    + sLineBreak + '</footer>';
+end;
+
+function THtmRec.BottomFixed: string;
+begin
+  Result :=                        '<!-- BottomFixed -->'                                                                                                                     //#[RvOrganizationFgColor()]
+                  //+ sLineBreak + '<div id="CoGoToTopButton" onclick="GoToTopFunction()" style="display:none;position:fixed;width:40px;height:40px;border-radius:3px;background:orange;bottom:12px;right:20px;cursor:pointer;z-index:99;">'
+                  //+ sLineBreak + '  <div id="CoGoToTopArrow" style="transform:rotate(45deg);border-top:5px solid #[RvOrganizationBgColor()];border-left:5px solid #[RvOrganizationBgColor()];border-bottom:none;border-right:none;width:10px;height:10px;margin:15px auto"></div>'
+                  //+ sLineBreak + '</div>'
+                    + sLineBreak + '<button class="w3-button w3-circle w3-theme-d1 w3-card-4" id="CoGoToTopButton" onclick="GoToTopFunction();" style="display:none;padding:0px;position:fixed;width:40px;height:40px;bottom:20px;right:20px;"><i class="fa fa-chevron-up"></i></button>'
+                    + sLineBreak + '<script>'
+                    + sLineBreak + 'window.onscroll = function() {ScrollFunction()};' // when the user scrolls down 20px from the top of the document, show the button
+                    + sLineBreak + 'function ScrollFunction() {'
+                    + sLineBreak + '  if (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) {'
+                    + sLineBreak + '    document.getElementById("CoGoToTopButton").style.display = "block";'
+                    + sLineBreak + '  } else {'
+                    + sLineBreak + '    document.getElementById("CoGoToTopButton").style.display = "none";'
+                    + sLineBreak + '  }'
+                    + sLineBreak + '}'
+                    + sLineBreak + 'function GoToTopFunction() {' // when the user clicks on the button, scroll to the top of the document
+                    + sLineBreak + '  document.body.scrollTop = 0;'
+                    + sLineBreak + '  document.documentElement.scrollTop = 0;'
+                    + sLineBreak + '}'
+                    + sLineBreak + '</script>'
+end;
+  {$ENDREGION}
+
+  {$REGION 'pages'}
+function THtmRec.HtmlI(IvDba: TDbaCls; IvTitle, IvText: string; IvBuilder: integer): string;
+begin
+  Result := Html(IvDba
+  , 'Info'
+  , SpaceV()
+  + H(2, IvTitle)
+  + P(IvText)
+  + SpaceV()
+  );
+end;
+
+function THtmRec.HtmlW(IvDba: TDbaCls; IvTitle, IvText: string; IvBuilder: integer): string;
+begin
+  Result := Html(IvDba
+  , 'Warning'
+  , SpaceV()
+  + AlertW(IvTitle, IvText)
+  + SpaceV()
+  );
+end;
+
+function THtmRec.HtmlE(IvDba: TDbaCls; IvTitle, IvText: string; IvBuilder: integer): string;
+begin
+  Result := Html(IvDba
+  , 'Exception'
+  , SpaceV()
+  + AlertE(IvTitle, IvText)
+  + SpaceV()
+  );
+end;
+
+function THtmRec.HtmlPageNotFound(IvDba: TDbaCls; IvBuilder: integer): string;
+begin
+  Result := Html(IvDba
+  , 'PageNotFound'
+  , SpaceV()
+  + AlertW('Page Not Found', Format('The requested page %s%s%s?%s is inactive or it does not exists', [wre.ServerHost, wre.Url, wre.PathInfo, wre.Query]))
+  + SpaceV()
+  );
+end;
+  {$ENDREGION}
+
+  {$REGION 'buttons'}
+function THtmRec.BtnBack(IvCaption, IvClass, IvStyle: string): string;
+begin
+  Result := '<button onclick="window.history.go(-1)" type="button" class="w3-button w3-theme-d3">' + iif.NxD(IvCaption, 'Back') + '</button>';
+end;
+
+function THtmRec.BtnHome(IvCaption, IvClass, IvStyle: string): string;
+begin
+  Result := '<button onclick="window.location.href=''/''" type="button" class="w3-button w3-theme-d3">' + iif.NxD(IvCaption, 'Home') + '</button>';
+end;
+
+function THtmRec.BtnXHome(IvClass, IvStyle: string): string;
+begin
+  Result := '<span onclick="window.location.href=''/''" class="w3-button w3-xlarge w3-transparent w3-display-topright" title="Close Modal">×</span>'
+end;
+
+function THtmRec.BtnXHide(IvCo, IvClass, IvStyle: string): string;
+begin
+  Result := '<span onclick="document.getElementById(''' + IvCo + ''').style.display=''none''" class="w3-button w3-xlarge w3-transparent w3-display-topright" title="Close Modal">×</span>'
+end;
+  {$ENDREGION}
+
+  {$REGION 'alerts'}
+function THtmRec.Alert(IvTitle, IvText, IvClass: string): string;
+begin
+  Result :=           sLineBreak + Format('<div%s>', [AttrClasse(['w3-panel', 'w3-display-container', IvClass])])
+                    + sLineBreak + '<span onclick="this.parentElement.style.display=''none''" class="w3-button w3-large w3-display-topright">&times;</span>'
+                    + sLineBreak + iif.ExF(IvTitle, '<h3>%s</h3>')
+                    + sLineBreak + iif.ExF(IvText, '<p>%s</p>')
+                    + sLineBreak + '</div>';
+end;
+
+function THtmRec.AlertI(IvTitle, IvText: string): string;
+begin
+  Result := Alert(IvTitle, IvText, 'w3-indigo');
+end;
+
+function THtmRec.AlertS(IvTitle, IvText: string): string;
+begin
+  Result := Alert(IvTitle, IvText, 'w3-green');
+end;
+
+function THtmRec.AlertW(IvTitle, IvText: string): string;
+begin
+  Result := Alert(IvTitle, IvText, 'w3-orange');
+end;
+
+function THtmRec.AlertD(IvTitle, IvText: string): string;
+begin
+  Result := Alert(IvTitle, IvText, 'w3-deep-orange');
+end;
+
+function THtmRec.AlertE(IvTitle, IvText: string): string;
+begin
+  Result := Alert(IvTitle, IvText, 'w3-dark-gray');
+end;
+  {$ENDREGION}
+
+  {$REGION 'layouts'}
+function THtmRec.SpaceH(IvSpaces: integer): string;
+begin
+  Result :=                        ' &nbsp; ';
+end;
+
+function THtmRec.SpaceV(IvPx: integer): string;
+begin
+  Result :=           sLineBreak + Format('<div style="height:%dpx">', [IvPx])
+                    + sLineBreak + '</div>';
+end;
+
+function THtmRec.Row(IvCellVec, IvClassVec, IvStyleVec: TStringVector): string;
+var
+  i: integer;
+begin
+  Result :=          sLineBreak + '<div class="w3-row">';
+  for i := Low(IvCellVec) to High(IvCellVec) do
+  Result := Result + sLineBreak + Format('<div%s%s>%s</div>', [AttrClasse([IvClassVec[i]]), AttrStyle(IvStyleVec[i]), IvCellVec[i]]);
+  Result := Result + sLineBreak + '</div>';
+end;
+  {$ENDREGION}
+
+  {$REGION 'tables'}
+function THtmRec.TableArr(IvArr: TStringMatrix; IvClass, IvStyle, IvCo, IvCaption: string; Iv1stRowIsHeader: boolean): string;
+var
+  i, j: integer;
+  r: string;
+begin
+  Result := '';
+
+  // header
+  if Iv1stRowIsHeader then begin
+    for j := Low(IvArr[0]) to High(IvArr[0]) do
+      r := r + Th(IvArr[0][j]);
+    Result := Result + Tr(r);
+  end;
+
+  // rows
+  for i := Low(IvArr) + iif.Int(Iv1stRowIsHeader, 1, 0) to High(IvArr) do begin
+    r := '';
+    for j := Low(IvArr[i]) to High(IvArr[i]) do
+      r := r + Td(IvArr[i][j]);
+    Result := Result + Tr(r);
+  end;
+  Result := Table(Result, IvClass, IvStyle, IvCo, IvCaption);
+end;
+
+function THtmRec.TableDs(IvDs: TDataset; IvClass, IvStyle, IvCo, IvCaption: string): string;
+var
+
+  {$REGION 'var'}
+  c, r, rr, f, n, s, h, v: string; // caption, row, rows, fldname, name, showname, header, value
+  i, j: integer; // counter
+
+  function FieldIsGost(IvField: string): boolean;
+  begin
+    Result := IvField.EndsWith('Tooltip') or IvField.EndsWith('Symbol') or IvField.EndsWith('Ghost'); // canvasjsservicefields
+  end;
+  {$ENDREGION}
+
+begin
+
+  {$REGION 'exit'}
+  if not Assigned(IvDs) then begin
+    Result := Panel(NOT_ASSIGNED_STR);
+    Exit
+  end;
+  if IvDs.IsEmpty then begin
+    Result := Panel(NO_DATA_STR);
+    Exit
+  end;
+  {$ENDREGION}
+
+  {$REGION 'caption'}
+  if IvClass.Contains('no-caption') then
+    c := ''
+  else begin
+  //c := Format('<caption class="wks-cursor-pointer w3-left-align" onclick="w3.toggleShow(''#%s'')">%d Record(s)', [IvCo, IvDs.RecordCount]); // scompare insieme alla tabella
+  //c := Format('<button class="w3-button w3-small" onclick="w3.toggleShow(''#%s'')">%s%d Record(s)</button>', [IvCo, iif.ExA(IvCaption, ' - '), IvDs.RecordCount]);
+    c := Format('<span class="w3-text-gray w3-small" onclick="w3.toggleShow(''#%s'')" style="cursor:pointer;">%s%d Record(s)</span>', [IvCo, iif.ExA(IvCaption, ' - '), IvDs.RecordCount]);
+  end;
+  {$ENDREGION}
+
+  {$REGION 'header'}
+  if IvClass.Contains('no-header') then
+    h := ''
+  else begin
+    r := Th('#');
+    for i := 0 to IvDs.FieldCount - 1 do begin
+      // fieldname
+      f := IvDs.Fields[i].FieldName; // DisplayName
+
+      // skip
+      if FieldIsGost(f) then
+        Continue;
+
+      // fix/coname/showname
+      n := f;
+      if n.StartsWith('Fld') then
+        Delete(n, 1, 3);
+    //x := ''; // IvCo + n + 'Header'; // +i.ToString
+      s := str.Expande(n);
+
+      // header
+      r := r + Th(s);
+    end;
+    h := Tr(r, 'w3-theme-d1');
+  end;
+  {$ENDREGION}
+
+  {$REGION 'rows'}
+  j := 0;
+  rr := '';
+  IvDs.First;
+  while not IvDs.Eof do begin
+    // inc
+    Inc(j);
+
+    // row
+    r := Td(j.ToString);
+    for i := 0 to IvDs.FieldCount-1 do begin
+      // fieldname
+      f := IvDs.Fields[i].FieldName;
+
+      // skip
+      if FieldIsGost(f) then
+        Continue;
+
+      // value
+      v := IvDs.Fields.Fields[i].AsString;
+
+      // fix
+//    if str.Has(v, sLineBreak) then
+//      v := str.Replace(v, sLineBreak, HBR);
+
+      // strip
+//    v := Strip(v, false);
+
+      // charescape
+//    v := Encode(v);
+
+      // id
+//    x := ''; // Format('CoI%dJ%d', [i, j]);
+
+      // row
+      r := r + Td(v);
+    end;
+    rr := rr + Tr(r);
+
+    // next
+    IvDs.Next;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'table'}
+  Result := Table(h + rr, IvClass, IvStyle, IvCo, c);
+  {$ENDREGION}
+
+end;
+
+function THtmRec.TableSql(IvDba: TDbaCls; IvSql, IvClass, IvStyle, IvCo, IvCaption: string; IvTimeOut: integer): string;
+var
+  k: string;
+  d: TDataset;
+begin
+
+  {$REGION 'exit'}
+  if iis.Nx(IvSql) then begin
+    Result := AlertW(IvCaption, 'Your sql query is probably empty, please check');
+    Exit
+  end;
+  {$ENDREGION}
+
+  {$REGION 'ds'}
+  if not IvDba.DsFD(IvSql, d, k, true, IvTimeOut) then begin
+    Result := Panel(k);
+    Exit
+  end;
+  Result := TableDs(d, IvClass, IvStyle, IvCo, IvCaption);
+  {$ENDREGION}
+
+end;
+
+function THtmRec.TableWre: string;
+var
+  i: integer;
+  x: TTkvVec;
+begin
+  // kv
+  x := wre.TkvVec;
+
+  // rows
+  Result := '<tr class="w3-theme-d1"><th>#</th><th>Tag</th><th>Field</th><th>Value</th></tr>';
+  for i := Low(x) to High(x) do
+    Result := Result + Format('<tr><td>%d</td><td>%s</td><td>%s</td><td>%s</td></tr>', [i+1, x[i].Tag, x[i].Key, x[i].Val]);
+
+  // tbl
+  Result := Table(Result);
+end;
+  {$ENDREGION}
+
+  {$REGION 'forms'}
+function THtmRec.Form(IvCoVec, IvKindVec, IvValueVec: array of string; IvClass, IvAction, IvMethod: string): string;
+
+  {$REGION 'help'}
+  (*
+  method
+  ------
+  get       form-data is sent as URL variables (?CoAbc=123)  default
+  post      form-data is sent as HTTP post transaction
+
+  target
+  ------
+  _blank    the response is displayed in a new window or tab
+  _self     the response is displayed in the same frame               default, which means that the response will open i the current window
+  _parent   the response is displayed in the parent frame
+  _top      the response is displayed in the full body of the window
+  framename the response is displayed in a named iframe
+  *)
+  {$ENDREGION}
+
+var
+  i: integer;
+  c, k, v, l: string;
+begin
+  for i := Low(IvCoVec) to High(IvCoVec) do begin
+    c := IvCoVec[i];
+    k := IvKindVec[i];
+    v := IvValueVec[i];
+    l := nam.CoRemove(c);
+    Result := Result + Input(c, k, l, v);
+  end;
+  Result :=           sLineBreak + Format('<form%s action="%s" method="%s">', [AttrClasse([IvClass]), IvAction, IvMethod])
+                    + sLineBreak +   Result
+                    + sLineBreak + '</form>';
+end;
+
+function THtmRec.Labl(IvContent, IvClass: string): string;
+begin
+  Result :=           sLineBreak + Format('<label%s>', [AttrClasse([iif.NxD(IvClass.Empty, '')])]) // w3-text-theme
+                                 +   IvContent
+                                 + '</label>';
+end;
+
+function THtmRec.Input(IvCo, IvKind, IvLabel, IvValue, IvPlaceholder, IvClass, IvStyle: string; IvUseLayout: boolean): string;
+var
+  l, i: string; // label, input
+begin
+  if          IvKind = 'Radio' then begin                                       // radio button (for selecting one of many choices)
+    i := '<div class="w3-input">'
+       +   '<input type="radio" class="w3-radio" name="gender" value="male" checked> <label style="margin-right:24px">Male</label>'
+       +   '<input type="radio" class="w3-radio" name="gender" value="female"> <label style="margin-right:24px">Female</label>'
+       +   '<input type="radio" class="w3-radio" name="gender" value="" disabled> <label>Don''t know (Disabled)</label>'
+       + '</div>';
+  end else if IvKind = 'Check' then begin                                       // checkbox (for selecting zero or more of many choices)
+    i := '<div class="w3-input">'
+       +   '<input type="checkbox" class=" class="w3-check" value="male" checked="checked"> <label style="margin-right:24px">Male</label>'
+       +   '<input type="checkbox" class=" class="w3-check" value="female"> <label style="margin-right:24px">Female</label>'
+       +   '<input type="checkbox" class=" class="w3-check" value="" disabled>'
+       + '</div>';
+  end else if IvKind = 'Textarea' then begin                                    // textarea
+    i := '<textarea name="message" rows="10" cols="30" class="w3-input w3-border">' + IvValue + '</textarea>';
+  end else if IvKind = 'Select' then begin                                      // select
+    i := '<select id="cars" name="cars" class="w3-select w3-border">'           // size="1" multiple
+       +   '<option value="" selected disabled>Choose your option</option>'
+       +   '<option value="volvo">Volvo</option>'
+       +   '<option value="saab">Saab</option>'
+       +   '<option value="fiat">Fiat</option>'
+       +   '<option value="audi">Audi</option>'
+       +   '<option value="yamaha">Yamaha</option>'
+       +   '<option value="opel">Opel</option>'
+       + '</select>';
+  end else if IvKind = 'Date' then begin                                        // date
+    i := Format('<input%s type="date" value="%s"%s%s%s>', [AttrIdName(IvCo), IvValue, AttrClasse(['w3-input', 'w3-validate', IvClass]), AttrStyle(IvStyle), AttrPlaceholder(IvPlaceholder)]);
+  end else if IvKind = 'DateTime' then begin                                    // datetime
+    i := Format('<input%s type="datetime" value="%s"%s%s%s>', [AttrIdName(IvCo), IvValue, AttrClasse(['w3-input', 'w3-validate', IvClass]), AttrStyle(IvStyle), AttrPlaceholder(IvPlaceholder)]);
+  end else if IvKind = 'DateTimeLocal' then begin                               // datetimelocal
+    i := Format('<input%s type="datetime-local" value="%s"%s%s%s>', [AttrIdName(IvCo), IvValue, AttrClasse(['w3-input', 'w3-validate', IvClass]), AttrStyle(IvStyle), AttrPlaceholder(IvPlaceholder)]);
+  end else if IvKind = 'Button' then begin                                      // clickable button
+    i := Format('<button type="button"%s%s%s onclick="alert(''Hello World!'')">', [AttrIdName(IvCo), IvClass, IvStyle]) + IvValue + '</button>';
+  end else if IvKind = 'Submit' then begin                                      // submit button (for submitting the form)
+    i := Format('<input type="submit" value="%s"%s%s%s>', [IvValue, AttrIdName(IvCo), AttrClasse([IvClass]), AttrStyle(IvStyle)]);
+  end else begin                                                                // single-line text input field
+    i := Format('<input%s type="text" value="%s"%s%s%s>', [AttrIdName(IvCo), IvValue, AttrClasse(['w3-input', 'w3-validate', IvClass]), AttrStyle(IvStyle), AttrPlaceholder(IvPlaceholder)]);
+  end;
+
+  // assy
+  l := iif.ExF(IvLabel, '<label for="cars">%s</label>'); // class="w3-text-theme"
+  if IvUseLayout then
+    Result := Row([l, i], ['w3-col', 'w3-rest'], ['width:150px;margin-top:8px', ''])
+  else
+    Result := l + sLineBreak + i;
+end;
+  {$ENDREGION}
+
+  {$REGION 'charts'}
+function THtmRec.Chart(IvCo, IvW, IvH, IvTitle, IvData: string): string;
+begin
+  Result :=      '<div id="' + IvCo + '" style="width:' + IvW + ';height:' + IvH + ';display: inline-block;"></div>'
+  + sLineBreak + '<script>'
+//+ sLineBreak + 'window.onload = function () {'
+  + sLineBreak + 'var chart = new CanvasJS.Chart("' + IvCo + '", {'
+  + sLineBreak + '  title:{'
+  + sLineBreak + '    text: "' + IvTitle + '"'
+  + sLineBreak + '  , fontSize: 18'
+  + sLineBreak + '  }'
+  + sLineBreak + ', data: [{'
+	+ sLineBreak + '    type: "scatter"'
+	+ sLineBreak + '  , dataPoints: ['
+  + sLineBreak +        IvData
+  + sLineBreak + '    ]'
+  + sLineBreak + '  }]'
+  + sLineBreak + '});'
+  + sLineBreak + 'chart.render();'
+//+ sLineBreak + '}'
+  + sLineBreak + '</script>';
+end;
+
+function THtmRec.ChartDs(IvCo, IvW, IvH, IvTitle: string; IvDs: TDataset; IvXFld, IvYFld, IvTooltipFld: string): string;
+var
+  dt: TDateTime;
+  da, ys, lb: string; // data
+  //yy, mm, dd, hh, mi, ss, ms: word;
+begin
+  // data
+  IvDs.First;
+  while not IvDs.Eof do begin
+    dt := IvDs.FieldByName(IvXFld).AsDateTime;
+//    DecodeDate(dt, yy, mm, dd);
+//    DecodeTime(dt, hh, mi, ss, ms);
+//    xs := Format('new Date(Date.UTC(%d,%d,%d,%d,%d,%d,%d))', [yy, mm, dd, hh, mi, ss, ms]);
+    lb := DateTimeToStr(dt);
+    ys := IvDs.FieldByName(IvYFld).AsString;
+//    xs := rnd.Int().ToString;
+//    ys := rnd.Int().ToString;
+//    da := da + Format(', {y:%s}', [ys]);
+    da := da + Format(', {label:"%s", y:%s}', [lb, ys]);
+//    da := da + Format(', {x:%s, y:%s}', [xs, ys]);
+    IvDs.Next;
+  end;
+  Delete(da, 1, 2);
+  //da := '{' + da + '}';
+
+  // chart
+  Result := Chart(IvCo, IvW, IvH, IvTitle, da);
+end;
+
+function THtmRec.ChartSql(IvCo, IvW, IvH, IvTitle: string; IvDba: TDbaCls; IvSql, IvXFld, IvYFld, IvTooltipFld: string; IvTimeOut: integer): string;
+var
+  k: string;
+  d: TDataset;
+begin
+
+  {$REGION 'exit'}
+  if iis.Nx(IvSql) then begin
+    Result := AlertW('Chart ' + IvTitle, 'Your sql query is probably empty, please check');
+    Exit
+  end;
+  {$ENDREGION}
+
+  {$REGION 'ds'}
+  if not IvDba.DsFD(IvSql, d, k, true, IvTimeOut) then begin
+    Result := Panel(k);
+    Exit
+  end;
+  Result := ChartDs(IvCo, IvW, IvH, IvTitle, d, IvXFld, IvYFld, IvTooltipFld);
+  {$ENDREGION}
+
+end;
+  {$ENDREGION}
+
+  {$REGION 'modals'}
+function THtmRec.ModMessage(IvTitle, IvText, IvClass: string): string;
+begin
+  Result :=
+    sLineBreak + '<!-- Modal Message -->'
+  + sLineBreak + '<div id="CoModalMessage" class="w3-modal" style="display:block">'
+  + sLineBreak + '  <div class="w3-modal-content w3-card-4 w3-animate-zoom" style="max-width:600px">'
+  + sLineBreak + '    <div class="w3-center"><br>'
+  + sLineBreak + '      ' + BtnXHome
+  + sLineBreak + '      <i class="fa fa-check w3-jumbo w3-text-green w3-margin-top" alt="' + IvTitle + '"></i>'
+  + sLineBreak + '      ' + H(1, IvTitle)
+  + sLineBreak + '    </div>'
+  + sLineBreak + '    <div class="w3-container">'
+  + sLineBreak + '      ' + IvText
+  + sLineBreak + '    </div>'
+  + sLineBreak + '    <div class="w3-container w3-border-top w3-padding-16 w3-theme-l2 w3-yellow">'
+  + sLineBreak + '      ' + BtnHome('Cancel') + SpaceH + BtnBack
+  + sLineBreak + '    </div>'
+  + sLineBreak + '  </div>'
+  + sLineBreak + '</div>'
+end;
+
+function THtmRec.ModUserLogin: string;
+begin
+  Result :=
+    sLineBreak + '<!-- User Login -->'
+  + sLineBreak + '<div id="CoUserLogin" class="w3-modal" style="display:block">'
+  + sLineBreak + '  <div class="w3-modal-content w3-card-4 w3-animate-zoom" style="max-width:600px">'
+  + sLineBreak + '    <div class="w3-center"><br>'
+  + sLineBreak + '      ' + BtnXHome
+  + sLineBreak + '      <img src="' + org.LogoUrl + '" class="w3-margin-top" style="width:30%" alt="Avatar">' // w3-circle
+  + sLineBreak + '    </div>'
+  + sLineBreak + '    <form class="w3-container" action="' + wre.ScriptName + '/LoginTry">'
+  + sLineBreak + '      <div class="w3-section">'
+  + sLineBreak + '        ' + Labl('<b>Username</b>')
+  + sLineBreak + '        <input name="CoUsername" class="w3-input w3-border w3-margin-bottom" type="text" placeholder="Enter Username" required>'
+  + sLineBreak + '        ' + Labl('<b>Password</b>')
+  + sLineBreak + '        <input name="CoPassword" class="w3-input w3-border" type="text" placeholder="Enter Password" required>'
+  + sLineBreak + '        <button class="w3-button w3-block w3-green w3-section w3-padding" type="submit">Login</button>'
+  + sLineBreak + '        <input class="w3-check w3-margin-top" type="checkbox" checked="checked"> Remember me'
+  + sLineBreak + '      </div>'
+  + sLineBreak + '    </form>'
+  + sLineBreak + '    <div class="w3-container w3-border-top w3-padding-16 w3-theme-l2">'
+//+ sLineBreak + '      <button onclick="document.getElementById(''CoUserLogin'').style.display=''none''" type="button" class="w3-button w3-red">Cancel</button>'
+  + sLineBreak + '      ' + BtnHome('Cancel') + SpaceH + BtnBack
+  + sLineBreak + '      <span class="w3-right w3-padding w3-hide-small"><a href="' + wre.ScriptName + '/AccountForgot">Forgot username or password ?</a></span>'
+  + sLineBreak + '      <span class="w3-right w3-padding w3-hide-small"><a href="' + wre.ScriptName + '/AccountCreate">Create new account</a></span>'
+  + sLineBreak + '    </div>'
+  + sLineBreak + '  </div>'
+  + sLineBreak + '</div>'
+end;
+
+function THtmRec.ModUserAccountCreate: string;
+begin
+  Result :=
+    sLineBreak + '<!-- Account Create -->'
+  + sLineBreak + '<div id="CoAccountCreate" class="w3-modal" style="display:block">'
+  + sLineBreak + '  <div class="w3-modal-content w3-card-4 w3-animate-zoom" style="max-width:600px">'
+  + sLineBreak + '    <div class="w3-center"><br>'
+  + sLineBreak + '      ' + BtnXHome
+  + sLineBreak + '      <i class="fa fa-user-circle-o w3-jumbo w3-margin-top" alt="Account Create"></i>'
+  + sLineBreak + '      ' + H(1, 'Create New Account')
+  + sLineBreak + '    </div>'
+  + sLineBreak + '    <form class="w3-container" action="' + wre.ScriptName + '/AccountCreateTry">'
+  + sLineBreak + '      <div class="w3-section">'
+  + sLineBreak + '        ' + Labl('<b>Organization</b>')
+  + sLineBreak + '        <input name="CoOrganization" class="w3-input w3-border w3-margin-bottom" type="text" placeholder="Enter Company, School, Institution, etc. (one single capitalized word)" required>'
+  + sLineBreak + '        ' + Labl('<b>Username</b>')
+  + sLineBreak + '        <input name="CoUsername" class="w3-input w3-border w3-margin-bottom" type="text" placeholder="Enter Username" required>'
+  + sLineBreak + '        ' + Labl('<b>Password</b>')
+  + sLineBreak + '        <input name="CoPassword" class="w3-input w3-border" type="text" placeholder="Enter Password" required>'
+  + sLineBreak + '        <input name="CoSocial" class="w3-check w3-margin-top" type="checkbox" checked="checked"> Social'
+  + sLineBreak + '        <button class="w3-button w3-block w3-green w3-section w3-padding" type="submit">Create New Account</button>'
+  + sLineBreak + '      </div>'
+  + sLineBreak + '    </form>'
+  + sLineBreak + '    <div class="w3-container w3-border-top w3-padding-16 w3-theme-l2">'
+  + sLineBreak + '      ' + BtnHome('Cancel') + SpaceH + BtnBack
+  + sLineBreak + '    </div>'
+  + sLineBreak + '  </div>'
+  + sLineBreak + '</div>'
+end;
+
+function THtmRec.ModUserAccountCreateDone: string;
+begin
+  Result :=
+    sLineBreak + '<!-- Account Create Done -->'
+  + sLineBreak + '<div id="CoAccountCreateDone" class="w3-modal" style="display:block">'
+  + sLineBreak + '  <div class="w3-modal-content w3-card-4 w3-animate-zoom" style="max-width:600px">'
+  + sLineBreak + '    <div class="w3-center"><br>'
+  + sLineBreak + '      ' + BtnXHome
+  + sLineBreak + '      <i class="fa fa-check w3-jumbo w3-text-green w3-margin-top" alt="Account Created"></i>'
+  + sLineBreak + '      ' + H(1, 'New Account Created')
+  + sLineBreak + '    </div>'
+  + sLineBreak + '    <div class="w3-container">'
+  + sLineBreak + '      ' + P('Your new account has been created.')
+  + sLineBreak + '      ' + P('Please check your email and follows the instructions to validate your email')
+  + sLineBreak + '    </div>'
+  + sLineBreak + '    <div class="w3-container w3-border-top w3-padding-16 w3-theme-l2">'
+  + sLineBreak + '      ' + BtnHome('Continue')
+  + sLineBreak + '    </div>'
+  + sLineBreak + '  </div>'
+  + sLineBreak + '</div>'
+end;
+
+function THtmRec.ModUserAccountForgot: string;
+begin
+  Result :=
+    sLineBreak + '<!-- Account Forgot -->'
+  + sLineBreak + '<div id="CoAccountCreate" class="w3-modal" style="display:block">'
+  + sLineBreak + '  <div class="w3-modal-content w3-card-4 w3-animate-zoom" style="max-width:600px">'
+  + sLineBreak + '    <div class="w3-center"><br>'
+  + sLineBreak + '      ' + BtnXHome
+  + sLineBreak + '      <i class="fa fa-key w3-jumbo w3-margin-right w3-margin-top" alt="Send Password"></i>'
+  + sLineBreak + '      ' + H(1, 'Forgot Username or Password')
+  + sLineBreak + '    </div>'
+  + sLineBreak + '    <form class="w3-container" action="' + wre.ScriptName + '/AccountForgotTry">'
+  + sLineBreak + '      <div class="w3-section">'
+  + sLineBreak + '        ' + Labl('<b>Email</b>')
+  + sLineBreak + '        <input name="CoEmail" class="w3-input w3-border w3-margin-bottom" type="text" placeholder="Enter the original email assocated with your account" required>'
+  + sLineBreak + '        <button class="w3-button w3-block w3-green w3-section w3-padding" type="submit">Send Account Info</button>'
+  + sLineBreak + '      </div>'
+  + sLineBreak + '    </form>'
+  + sLineBreak + '    <div class="w3-container w3-border-top w3-padding-16 w3-theme-l2">'
+  + sLineBreak + '      ' + BtnHome('Cancel') + SpaceH + BtnBack
+  + sLineBreak + '    </div>'
+  + sLineBreak + '  </div>'
+  + sLineBreak + '</div>'
+end;
+
+function THtmRec.ModUserAccountForgotDone: string;
+begin
+  Result :=
+    sLineBreak + '<!-- Account Forgot Done -->'
+  + sLineBreak + '<div id="CoAccountForgotDone" class="w3-modal" style="display:block">'
+  + sLineBreak + '  <div class="w3-modal-content w3-card-4 w3-animate-zoom" style="max-width:600px">'
+  + sLineBreak + '    <div class="w3-center"><br>'
+  + sLineBreak + '      ' + BtnXHome
+  + sLineBreak + '      <i class="fa fa-check w3-jumbo w3-text-green w3-margin-top" alt="Forgoten account info sent"></i>'
+  + sLineBreak + '      ' + H(1, 'Forgoten Account Info Sent')
+  + sLineBreak + '    </div>'
+  + sLineBreak + '    <div class="w3-container">'
+  + sLineBreak + '      ' + P('Your account relevant information has been sent via email')
+  + sLineBreak + '      ' + P('Please check your email')
+  + sLineBreak + '    </div>'
+  + sLineBreak + '    <div class="w3-container w3-border-top w3-padding-16 w3-theme-l2">'
+  + sLineBreak + '      ' + BtnHome('Continue')
+  + sLineBreak + '    </div>'
+  + sLineBreak + '  </div>'
+  + sLineBreak + '</div>'
+end;
+  {$ENDREGION}
+
+  {$REGION 'scripts'}
+function THtmRec.BootScript: string;
+begin
+    Result :=
+                      sLineBreak + '<!-- BootScript -->'
+                    + sLineBreak + '<script>'
+                    + sLineBreak + '// used to toggle accordion blocks'
+                    + sLineBreak + 'function w3AccordionToggle(id) {'
+                    + sLineBreak + '  var x = document.getElementById(id);'
+                    + sLineBreak + '  if (x.className.indexOf("w3-show") == -1) {'
+                    + sLineBreak + '    x.className += " w3-show";'
+                    + sLineBreak + '    x.previousElementSibling.className += " w3-theme-d1";'
+                    + sLineBreak + '  } else {'
+                    + sLineBreak + '    x.className = x.className.replace("w3-show", "");'
+                    + sLineBreak + '    x.previousElementSibling.className ='
+                    + sLineBreak + '    x.previousElementSibling.className.replace(" w3-theme-d1", "");'
+                    + sLineBreak + '  }'
+                    + sLineBreak + '}'
+                    + sLineBreak + '// used to toggle the menu on smaller screens when clicking on the menu button'
+                    + sLineBreak + 'function w3NavbarOpen() {'
+                    + sLineBreak + '  var x = document.getElementById("CoNavbar");'
+                    + sLineBreak + '  if (x.className.indexOf("w3-show") == -1) {'
+                    + sLineBreak + '    x.className += " w3-show";'
+                    + sLineBreak + '  } else {'
+                    + sLineBreak + '    x.className = x.className.replace(" w3-show", "");'
+                    + sLineBreak + '  }'
+                    + sLineBreak + '}'
+                    + sLineBreak + 'function w3SidebarLeftOpen(mainDivId, sidebarLeftId, width) {'
+                    + sLineBreak + '  document.getElementById(mainDivId).style.marginLeft = width;'
+                    + sLineBreak + '  document.getElementById(sidebarLeftId).style.width = width;'
+                    + sLineBreak + '  document.getElementById(sidebarLeftId).style.display = "block";'
+                  //+ sLineBreak + '  document.getElementById("openNav").style.display = "none";'
+                    + sLineBreak + '  CookieSet("CoSidebarLeftShow", "true", 7);'
+                    + sLineBreak + '}'
+                    + sLineBreak + 'function w3SidebarLeftClose(mainDivId, sidebarLeftId) {'
+                    + sLineBreak + '  document.getElementById(mainDivId).style.marginLeft = "0%";'
+                    + sLineBreak + '  document.getElementById(sidebarLeftId).style.display = "none";'
+                  //+ sLineBreak + '  document.getElementById("openNav").style.display = "inline-block";'
+                    + sLineBreak + '  CookieSet("CoSidebarLeftShow", "false", 7);'
+                    + sLineBreak + '}'
+                    + sLineBreak + 'function w3SidebarLeftToggle(mainDivId, sidebarLeftId, width) {'
+                    + sLineBreak + '  if (document.getElementById(sidebarLeftId).style.display == "none")'
+                    + sLineBreak + '    w3SidebarLeftOpen(mainDivId, sidebarLeftId, width)'
+                    + sLineBreak + '  else'
+                    + sLineBreak + '    w3SidebarLeftClose(mainDivId, sidebarLeftId);'
+                    + sLineBreak + '}'
+                    + sLineBreak + '</script>'
+end;
+  {$ENDREGION}
+
+  {$REGION 'divs'}
+function THtmRec.DivTiming(IvMs: integer): string;
+var
+  s: string;
+begin
+  if IvMs < 1000 then
+    s := Format('%d ms', [IvMs])
+  else
+    s := Format('%f s', [IvMs / 1000]);
+  Result := Format('<p class="w3-small w3-padding w3-opacity" style="text-align:center;">rendering time %s</p>', [s]);
+end;
+
+function THtmRec.DivActions(IvWre: TWebRequest): string;
+begin
+  Result := '<h3>Menu</h3><ul>'#13;
+//  for i := 0 to Actions.Count - 1 do
+//    Response.Content := Response.Content + '<li> <a href="' +
+//      Request.ScriptName + Action[I].PathInfo + '"> ' +
+//      Copy (Action[I].Name, 3, 1000) + '</a>'#13;
+//  Response.Content := Response.Content + '</ul>';
+end;
+
+function THtmRec.DivNews(IvLastHour: integer): string;
+begin
+  Result :=
+    sLineBreak + '      <!-- News -->'
+  + sLineBreak + '      <div class="w3-card w3-round w3-white">'
+  + sLineBreak + '      news...'
+  + sLineBreak + '      </div>'
+end;
+
+function THtmRec.DivUserAds(IvUser: string): string;
+begin
+  Result :=
+    sLineBreak + '      <!-- User Ads -->'
+  + sLineBreak + '      <div class="w3-card w3-round w3-white w3-padding-16 w3-center">'
+  + sLineBreak + '        <p>ADS</p>'
+  + sLineBreak + '      </div>'
+end;
+
+function THtmRec.DivUserBlog(IvLastHour: integer): string;
+begin
+  Result :=
+    sLineBreak + '      <!-- User Blog -->'
+  + sLineBreak + '      <div class="w3-row-padding">'
+  + sLineBreak + '        <div class="w3-col m12">'
+  + sLineBreak + '          <div class="w3-card w3-round w3-white">'
+  + sLineBreak + '            <div class="w3-container w3-padding">'
+  + sLineBreak + '              <h6 class="w3-opacity">Social Media template by w3.css</h6>'
+  + sLineBreak + '              <p contenteditable="true" class="w3-border w3-padding">Status: Feeling Blue</p>'
+  + sLineBreak + '              <button type="button" class="w3-button w3-theme"><i class="fa fa-pencil"></i>  Post</button>'
+  + sLineBreak + '            </div>'
+  + sLineBreak + '          </div>'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '      </div>'
+  + sLineBreak + ''
+  + sLineBreak + '      <div class="w3-container w3-card w3-white w3-round w3-margin"><br>'
+  + sLineBreak + '        <img src="/w3images/avatar2.png" alt="Avatar" class="w3-left w3-circle w3-margin-right" style="width:60px">'
+  + sLineBreak + '        <span class="w3-right w3-opacity">1 min</span>'
+  + sLineBreak + '        <h4>John Doe</h4><br>'
+  + sLineBreak + '        <hr class="w3-clear">'
+  + sLineBreak + '        <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>'
+  + sLineBreak + '          <div class="w3-row-padding" style="margin:0 -16px">'
+  + sLineBreak + '            <div class="w3-half">'
+  + sLineBreak + '              <img src="/w3images/lights.jpg" alt="Northern Lights" style="width:100%" class="w3-margin-bottom">'
+  + sLineBreak + '            </div>'
+  + sLineBreak + '            <div class="w3-half">'
+  + sLineBreak + '              <img src="/w3images/nature.jpg" alt="Nature" style="width:100%" class="w3-margin-bottom">'
+  + sLineBreak + '          </div>'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <button type="button" class="w3-button w3-theme-d1 w3-margin-bottom"><i class="fa fa-thumbs-up"></i>  Like</button>'
+  + sLineBreak + '        <button type="button" class="w3-button w3-theme-d2 w3-margin-bottom"><i class="fa fa-comment"></i>  Comment</button>'
+  + sLineBreak + '      </div>'
+  + sLineBreak + ''
+  + sLineBreak + '      <div class="w3-container w3-card w3-white w3-round w3-margin"><br>'
+  + sLineBreak + '        <img src="/w3images/avatar5.png" alt="Avatar" class="w3-left w3-circle w3-margin-right" style="width:60px">'
+  + sLineBreak + '        <span class="w3-right w3-opacity">16 min</span>'
+  + sLineBreak + '        <h4>Jane Doe</h4><br>'
+  + sLineBreak + '        <hr class="w3-clear">'
+  + sLineBreak + '        <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>'
+  + sLineBreak + '        <button type="button" class="w3-button w3-theme-d1 w3-margin-bottom"><i class="fa fa-thumbs-up"></i>  Like</button>'
+  + sLineBreak + '        <button type="button" class="w3-button w3-theme-d2 w3-margin-bottom"><i class="fa fa-comment"></i>  Comment</button>'
+  + sLineBreak + '      </div>'
+  + sLineBreak + ''
+  + sLineBreak + '      <div class="w3-container w3-card w3-white w3-round w3-margin"><br>'
+  + sLineBreak + '        <img src="/w3images/avatar6.png" alt="Avatar" class="w3-left w3-circle w3-margin-right" style="width:60px">'
+  + sLineBreak + '        <span class="w3-right w3-opacity">32 min</span>'
+  + sLineBreak + '        <h4>Angie Jane</h4><br>'
+  + sLineBreak + '        <hr class="w3-clear">'
+  + sLineBreak + '        <p>Have you seen this?</p>'
+  + sLineBreak + '        <img src="/w3images/nature.jpg" alt="" style="width:100%" class="w3-margin-bottom">'
+  + sLineBreak + '        <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>'
+  + sLineBreak + '        <button type="button" class="w3-button w3-theme-d1 w3-margin-bottom"><i class="fa fa-thumbs-up"></i>  Like</button>'
+  + sLineBreak + '        <button type="button" class="w3-button w3-theme-d2 w3-margin-bottom"><i class="fa fa-comment"></i>  Comment</button>'
+  + sLineBreak + '      </div>'
+end;
+
+function THtmRec.DivUserBug(IvUser: string): string;
+begin
+  Result :=
+    sLineBreak + '      <!-- User Bug -->'
+  + sLineBreak + '      <div class="w3-card w3-round w3-white w3-padding-16 w3-center">'
+  + sLineBreak + '        <p><i class="fa fa-bug w3-xxlarge"></i></p>'
+  + sLineBreak + '      </div>'
+end;
+
+function THtmRec.DivUserFrienRequest(IvUser: string): string;
+begin
+  Result :=
+    sLineBreak + '      <!-- User FrienRequest -->'
+  + sLineBreak + '      <div class="w3-card w3-round w3-white w3-center">'
+  + sLineBreak + '        <div class="w3-container">'
+  + sLineBreak + '          <p>Friend Request</p>'
+  + sLineBreak + '          <img src="/w3images/avatar6.png" alt="Avatar" style="width:50%"><br>'
+  + sLineBreak + '          <span>Jane Doe</span>'
+  + sLineBreak + '          <div class="w3-row w3-opacity">'
+  + sLineBreak + '            <div class="w3-half">'
+  + sLineBreak + '              <button class="w3-button w3-block w3-green w3-section" title="Accept"><i class="fa fa-check"></i></button>'
+  + sLineBreak + '            </div>'
+  + sLineBreak + '            <div class="w3-half">'
+  + sLineBreak + '              <button class="w3-button w3-block w3-red w3-section" title="Decline"><i class="fa fa-remove"></i></button>'
+  + sLineBreak + '            </div>'
+  + sLineBreak + '          </div>'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '      </div>'
+end;
+
+function THtmRec.DivUserInterest(IvUser, IvUserId: string): string;
+begin
+  Result :=
+    sLineBreak + '      <!-- User Interests -->'
+  + sLineBreak + '      <div class="w3-card w3-round w3-white w3-hide-small">'
+  + sLineBreak + '        <div class="w3-container">'
+  + sLineBreak + '          <p>Interests</p>'
+  + sLineBreak + '          <p>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme-d5">News</span>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme-d4">W3Schools</span>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme-d3">Labels</span>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme-d2">Games</span>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme-d1">Friends</span>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme">Games</span>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme-l1">Friends</span>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme-l2">Food</span>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme-l3">Design</span>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme-l4">Art</span>'
+  + sLineBreak + '            <span class="w3-tag w3-small w3-theme-l5">Photos</span>'
+  + sLineBreak + '          </p>'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '      </div>'
+end;
+
+function THtmRec.DivUserMore(IvUser: string): string;
+begin
+  Result :=
+    sLineBreak + '<!-- Accordion -->'
+  + sLineBreak + '<div class="w3-card w3-round">'
+  + sLineBreak + '  <div class="w3-white">'
+
+  + sLineBreak + '    <button onclick="w3AccordionToggle(''CoAccordion1'')" class="w3-button w3-block w3-theme-l1 w3-left-align"><i class="fa fa-circle-o-notch fa-fw w3-margin-right"></i> My Groups</button>'
+  + sLineBreak + '    <div id="CoAccordion1" class="w3-hide w3-container">'
+  + sLineBreak + '      <p>Some text..</p>'
+  + sLineBreak + '    </div>'
+
+  + sLineBreak + '    <button onclick="w3AccordionToggle(''CoAccordion2'')" class="w3-button w3-block w3-theme-l1 w3-left-align"><i class="fa fa-calendar-check-o fa-fw w3-margin-right"></i> My Events</button>'
+  + sLineBreak + '    <div id="CoAccordion2" class="w3-hide w3-container">'
+  + sLineBreak + '      <p>Some other text..</p>'
+  + sLineBreak + '    </div>'
+
+  + sLineBreak + '    <button onclick="w3AccordionToggle(''CoAccordion3'')" class="w3-button w3-block w3-theme-l1 w3-left-align"><i class="fa fa-users fa-fw w3-margin-right"></i> My Photos</button>'
+  + sLineBreak + '    <div id="CoAccordion3" class="w3-hide w3-container">'
+  + sLineBreak + '      <div class="w3-row-padding">'
+  + sLineBreak + '        <br>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/353473.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/353992.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/353234.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/784629.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/810643.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '        <div class="w3-half">'
+  + sLineBreak + '          <img src="http://prodimg.ai.lfoundry.com/emppics/784479.jpg" alt="" class="w3-margin-bottom" style="width:100%">'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '      </div>'
+  + sLineBreak + '    </div>'
+
+  + sLineBreak + '  </div>'
+  + sLineBreak + '</div>'
+end;
+
+function THtmRec.DivUserNotification(IvNotification: string): string;
+begin
+  Result :=
+    sLineBreak + '      <!-- User Notification -->'
+  + sLineBreak + '      <div class="w3-container w3-display-container w3-round w3-theme-l4 w3-border w3-theme-border w3-margin-bottom w3-hide-small">'
+  + sLineBreak + '        <span onclick="this.parentElement.style.display=''none''" class="w3-button w3-theme-l3 w3-display-topright">'
+  + sLineBreak + '          <i class="fa fa-remove"></i>'
+  + sLineBreak + '        </span>'
+  + sLineBreak + '        <p><strong>Hey!</strong></p>'
+  + sLineBreak + '        <p>People are looking at your profile. Find out who.</p>'
+  + sLineBreak + '      </div>'
+end;
+
+function THtmRec.DivUserProfile(IvUser, IvUserId: string): string;
+begin
+  Result :=
+    sLineBreak + '      <!-- User Profile -->'
+  + sLineBreak + '      <div class="w3-card w3-round w3-white">'
+  + sLineBreak + '        <div class="w3-container">'
+  + sLineBreak + '         <h4 class="w3-center">' + IvUser + '</h4>'
+//+ sLineBreak + '         <p class="w3-center"><img src="http://prodimg.ai.lfoundry.com/emppics/' + IvUserId + '.jpg" alt="Avatar" class="w3-circle" style="height:106px;width:106px"></p>'
+  + sLineBreak + '         <p class="w3-center"><img src="/User/G/giarussi/giarussi.png" alt="Avatar" class="w3-circle" style="height:106px;width:106px"></p>'
+  + sLineBreak + '         <hr>'
+  + sLineBreak + '         <p><i class="fa fa-pencil fa-fw w3-margin-right w3-text-theme"></i> Designer, UI</p>'
+  + sLineBreak + '         <p><i class="fa fa-home fa-fw w3-margin-right w3-text-theme"></i> London, UK</p>'
+  + sLineBreak + '         <p><i class="fa fa-birthday-cake fa-fw w3-margin-right w3-text-theme"></i> April 1, 1988</p>'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '      </div>'
+end;
+
+function THtmRec.DivUserUpcomingEvent(IvUser: string): string;
+begin
+  Result :=
+    sLineBreak + '      <!-- User UpcomingEvent -->'
+  + sLineBreak + '      <div class="w3-card w3-round w3-white w3-center">'
+  + sLineBreak + '        <div class="w3-container">'
+  + sLineBreak + '          <p>Upcoming Events:</p>'
+  + sLineBreak + '          <img src="/w3images/forest.jpg" alt="Forest" style="width:100%;">'
+  + sLineBreak + '          <p><strong>Holiday</strong></p>'
+  + sLineBreak + '          <p>Friday 15:00</p>'
+  + sLineBreak + '          <p><button class="w3-button w3-block w3-theme-l4">Info</button></p>'
+  + sLineBreak + '        </div>'
+  + sLineBreak + '      </div>'
+end;
+  {$ENDREGION}
+
+  {$REGION 'report'}
+function THtmRec.Report(IvDba: TDbaCls; IvId: integer): string;
+
+  {$REGION 'var'}
+var
+  xp, xd, xc: integer; // idx param, dataset, chart
+  sq, co, c2, cl, sy, va, na, n2, ww, hh, ti, t2, se, k: string; // sql, coname, class, style, value, name, w, h, title, select
+  dr, dp, dd, dc: TDataset; // ds report, params, datasets, dataset-charts
+  rr, rp, rd, ra, rb: string; // result report, params, datasets, dstable, dscharts
+  fx, fy, ft: string; // fldx, fldy, fldtooltip
+  nn, vv, cc: string; // spare name, value, coname
+  {$ENDREGION}
+
+begin
+
+  {$REGION 'dr rr report'}
+  sq := Format('select * from DbaReport.dbo.TblReport where FldState = ''Active'' and FldId = %d', [IvId]);
+  if not IvDba.DsFD(sq, dr, k, true) then begin
+    Result := AlertW('Report', k);
+    Exit;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'dp rp params'}
+  rp := '';
+  sq := Format('select * from DbaReport.dbo.TblParam where FldState = ''Active'' and FldReportId = %d order by FldOrder', [IvId]);
+  if not IvDba.DsFD(sq, dp, k) then begin
+    rp := rp + AlertW('Params', k);
+  end else begin
+    rp := rp +         '<h4 style="cursor:pointer;" onclick="w3.toggleShow(''#CoFilter'')">Filters</h4>' // class="w3-button"
+        + sLineBreak + '<form id="CoFilter" class="w3-card w3-padding"' + iif.Str(dr.FieldByName('FldParamsClosed').AsBoolean, ' style="display:none;"', '') + ' action="' + '' + '" method="post">'; //  w3-container
+    xp := 0;
+    while not dp.Eof do begin
+      Inc(xp);
+      co := nam.Co(dp.FieldByName('FldParam').AsString);
+      va := wre.StrGet(co, dp.FieldByName('FldDefault').AsString);
+      rp := rp + sLineBreak + Input(
+        co                                                                                  // Co
+      , dp.FieldByName('FldKind').AsString                                                  // Kind
+      , iif.NxD(dp.FieldByName('FldCaption').AsString, dp.FieldByName('FldParam').AsString) // Label
+      , va                                                                                  // Value
+      , dp.FieldByName('FldPlaceholder').AsString                                           // Placeholder
+      , dp.FieldByName('FldClass').AsString                                                 // Class
+      , dp.FieldByName('FldStyle').AsString                                                 // Style
+      );
+      dp.Next;
+    end;
+  end;
+  rp := rp + sLineBreak + '<br>' + Input('CoRefresh', 'Submit', '', 'Refresh', '', 'w3-btn w3-indigo');
+  rp := rp + sLineBreak + '<br></form>';
+  rp := rva.Rv(IvDba, rp);
+  {$ENDREGION}
+
+  {$REGION 'dd rd=ra+rb dataset(s)+chart(s)'}
+  rd := '';
+  sq := Format('select * from DbaReport.dbo.TblDataset where FldState = ''Active'' and FldReportId = %d order by FldOrder', [IvId]);
+  if not IvDba.DsFD(sq, dd, k) then begin
+    rd := rd + AlertW('Datasets', k);
+  end else begin
+    xd := 0; // ds
+    while not dd.Eof do begin
+
+      {$REGION 'ra dataset'}
+      ra := '';
+      Inc(xd);
+      na := dd.FieldByName('FldDataset').AsString;
+      ti := dd.FieldByName('FldTitle').AsString;
+      se := dd.FieldByName('FldSelect').AsString;
+      cl := dd.FieldByName('FldClass').AsString;
+      sy := dd.FieldByName('FldStyle').AsString;
+      co := nam.Co('Table' + xd.ToString);
+
+      // se compile
+      dp.First;
+      while not dp.Eof do begin
+        nn := dp.FieldByName('FldParam').AsString;
+        cc := nam.Co(nn);
+        vv := wre.StrGet(cc, dp.FieldByName('FldDefault').AsString);
+        se := stringreplace(se, '$'+nn+'$', vv, [rfReplaceAll]);
+        dp.Next;
+      end;
+      ra := ra {+ '<br>'} + TableSql(IvDba, se, cl, sy, co, {ti}''); // title will be used as title of ds+charts card
+      {$ENDREGION}
+
+      {$REGION 'rb charts'}
+      rb := '';
+      sq := Format('select * from DbaReport.dbo.TblChart where FldState = ''Active'' and FldReportId = %d and FldDataset = ''%s'' order by FldOrder', [IvId, na]);
+      if not IvDba.DsFD(sq, dc, k) then begin
+        rb := rb + AlertW('Charts', k);
+      end else begin
+        xc := 0; // chart
+        while not dc.Eof do begin
+          Inc(xc);
+          n2 := dc.FieldByName('FldChart').AsString;
+          t2 := dc.FieldByName('FldTitle').AsString;
+          ww := dc.FieldByName('FldWidth').AsString;
+          hh := dc.FieldByName('FldHeight').AsString;
+          fx := dc.FieldByName('FldXLabelAngleDeg').AsString;
+          fy := dc.FieldByName('FldYLabelAngleDeg').AsString;
+          ft := dc.FieldByName('FldDescription').AsString;
+        //cl := dc.FieldByName('FldClass').AsString;
+        //sy := dc.FieldByName('FldStyle').AsString;
+          c2 := nam.Co(Format('Dataset%dChart%d', [xd, xc]));
+          rb := rb {+ '<br>'} + '<div class="w3-center">' + ChartSql(c2, ww, hh, t2, IvDba, se, fx, fy, ft) + '</div>';
+          dc.Next;
+        end;
+      end;
+      {$ENDREGION}
+
+      // chart(s) + table
+      co := nam.Co('Dataset' + xd.ToString);
+      rd := rd
+      + '<h4 style="cursor:pointer;" onclick="w3.toggleShow(''#' + co + ''')">' + ti + '</h4>' // class="w3-button"
+      + '<div' + iif.Str(dd.FieldByName('FldPanelOn').AsBoolean, ' class="w3-card w3-padding"', '') + ' id="' + co + '"' + iif.Str(dd.FieldByName('FldPanelClosed').AsBoolean, ' style="display:none;"', '') + '>'
+      + iif.ExA(rb, '<br>') + ra
+      + '</div>';
+
+      // next
+      dd.Next;
+    end;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'report-assy'}
+  Result := '';
+
+  // add header
+  if not dr.FieldByName('FldContent').AsString.Contains('no-header') then
+    Result := Result + dr.FieldByName('FldHeader').AsString;
+
+  // add params rp
+  if not dr.FieldByName('FldContent').AsString.Contains('no-filter') then
+    Result := Result + rp;
+
+  // add datasets+charts rd
+  if not dr.FieldByName('FldContent').AsString.Contains('no-dataset') then // imply no-charts
+    Result := Result + rd;
+
+  // add footer
+  if not dr.FieldByName('FldContent').AsString.Contains('no-footer') then
+    Result := Result + dr.FieldByName('FldFooter').AsString;
+  {$ENDREGION}
+
+  {$REGION 'clean'}
+  dc.Free;
+  dd.Free;
+  dp.Free;
+  dr.Free;
+  {$ENDREGION}
+
+end;
+  {$ENDREGION}
+
+  {$REGION 'tests'}
+function THtmRec.TestChart(IvN: cardinal): string;
+var
+  i: integer;
+begin
+  Result :=      '<!-- Test Chart -->'
+  + sLineBreak + '<div id="CoTestChart" style="height:400px;width:100%;"></div>'
+  + sLineBreak + '<script>'
+  + sLineBreak + 'window.onload = function () {'
+  + sLineBreak + '  var chart = new CanvasJS.Chart("CoTestChart", {'
+  + sLineBreak + '    title:{'
+  + sLineBreak + '      text: "Loading %d Points"'
+  + sLineBreak + '    , fontSize: 16'
+  + sLineBreak + '    }'
+  + sLineBreak + '  , data: [{'
+  + sLineBreak + '      type: "scatter"'
+  + sLineBreak + '    , dataPoints: ['
+  + sLineBreak + '      {x:0.0, y: 0.0}';
+  for i := 1 to IvN do
+    Result := Result + Format(', {x:%d, y:%d}', [rnd.Int(0, 1000), rnd.Int(0, 500)]);
+  Result := Result + sLineBreak + '    ]'
+  + sLineBreak + '  }]'
+  + sLineBreak + ' });'
+  + sLineBreak + 'chart.render();'
+  + sLineBreak + '}'
+  + sLineBreak + '</script>';
+end;
+
+function THtmRec.TestForm: string;
+begin
+  Result := '<!-- Test Form -->'
+  + sLineBreak + Form(
+    ['CoFirstName', 'CoLastName', 'CoText', 'CoRadio', 'CoCheck', 'CoTextarea', 'CoSelect', 'CoButton', 'CoSubmit']
+  , ['Text'       , 'Text'      , 'Text'  , 'Radio'  , 'Check'  , 'Textarea'  , 'Select'  , 'Button'  , 'Submit'  ]
+  , ['Gio'        , 'Vanni'     , 'abc'   , ''       , ''       , 'abcdef'    , ''        , ''        , ''        ]
+  , 'w3-container', wre.ScriptName + '/Test', 'get');
+end;
+
+function THtmRec.TestTable(IvRow, IvCol: cardinal): string;
+var
+  r, c: integer;
+  a: TStringMatrix;
+begin
+  // rows
+  SetLength(a, IvRow);
+
+  // cols
+  for r := 0 to IvRow - 1 do begin
+    SetLength(a[r], IvCol);
+    for c := 0 to IvCol - 1 do
+      a[r, c] := ifthen(true, Format('r:%d , c:%d', [r, c]), rnd.Str(8));
+  end;
+
+  Result := '<!-- Test Table -->'
+  + sLineBreak + TableArr(a);
+end;
+
+function THtmRec.TestTheme: string;
+begin
+  Result :=      '<!-- Test Theme -->'
+  + sLineBreak + '<div class="w3-card-4">'
+  + sLineBreak + '  <div class="w3-container w3-theme w3-card">'
+  + sLineBreak + '    <h1>Test Theme</h1>'
+  + sLineBreak + '  </div>'
+  + sLineBreak + '  <div class="w3-container w3-text-theme">'
+  + sLineBreak + '    <h2>w3-text-theme</h2>'
+  + sLineBreak + '  </div>'
+  + sLineBreak + '  <ul class="w3-ul w3-border-top">'
+  + sLineBreak + '    <li class="w3-theme-l5"><p>w3-theme-l5 (w3-theme-light)</p></li>'
+  + sLineBreak + '    <li class="w3-theme-l4"><p>w3-theme-l4</p></li>'
+  + sLineBreak + '    <li class="w3-theme-l3"><p>w3-theme-l3</p></li>'
+  + sLineBreak + '    <li class="w3-theme-l2"><p>w3-theme-l2</p></li>'
+  + sLineBreak + '    <li class="w3-theme-l1"><p>w3-theme-l1</p></li>'
+  + sLineBreak + '    <li class="w3-theme"><p>w3-theme</p></li>'
+  + sLineBreak + '    <li class="w3-theme-d1"><p>w3-theme-d1</p></li>'
+  + sLineBreak + '    <li class="w3-theme-d2"><p>w3-theme-d2</p></li>'
+  + sLineBreak + '    <li class="w3-theme-d3"><p>w3-theme-d3</p></li>'
+  + sLineBreak + '    <li class="w3-theme-d4"><p>w3-theme-d4</p></li>'
+  + sLineBreak + '    <li class="w3-theme-d5"><p>w3-theme-d5 (w3-theme-dark)</p></li>'
+  + sLineBreak + '  </ul>'
+  + sLineBreak + '</div>';
+end;
+  {$ENDREGION}
+
+{$ENDREGION}
+
 {$REGION 'THttRec'}
 function THttRec.Get(IvUrl: string; var IvContent, IvFbk: string): boolean;
 var
@@ -5288,17 +9434,17 @@ end;
 
 function TImgRec.DbaInit(var IvFbk: string): boolean;
 begin
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TImgRec.DbaInsert(var IvFbk: string): boolean;
 begin
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TImgRec.DbaSelect(var IvFbk: string): boolean;
 begin
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 procedure TImgRec.DbaToDisk(IvFile, IvTable, IvField, IvWhere: string);
@@ -5633,6 +9779,56 @@ begin
 end;
 {$ENDREGION}
 
+{$REGION 'TIsaRec'}
+function TIsaRec.IsapiUrl(IvObj: string): string;
+var
+  u: string;
+begin
+  // url
+  u := srv.Url;
+
+  // url
+  if IvObj <> '' then
+    Result := u + Format(ISAPI_DLL_URL, [IvObj])
+  else
+    Result := u + byn.Spec; // XxxIsapiProject.dll/exe
+end;
+{$ENDREGION}
+
+{$REGION 'TLgoRec'}
+function TLgoRec.Spec(IvOrganization: string): string;
+var
+  o: string;
+begin
+  o := iif.NxD(IvOrganization, 'Wks');
+  Result := Format('%s\%1s\%s\%sLogo.png', [sys.ORG_DIR, o, o, o]);
+end;
+
+function TLgoRec.Url(IvOrganization: string): string;
+var
+  o: string;
+begin
+  o := iif.NxD(IvOrganization, 'Wks');
+  Result := Format('%s/Organization/%1s/%s/%sLogo.png', [srv.Url, o, o, o]);
+end;
+
+function TLgoRec.InvSpec(IvOrganization: string): string;
+var
+  o: string;
+begin
+  o := iif.NxD(IvOrganization, 'Wks');
+  Result := Format('%s\%1s\%s\%sLogoInv.png', [sys.ORG_DIR, o, o, o]);
+end;
+
+function TLgoRec.InvUrl(IvOrganization: string): string;
+var
+  o: string;
+begin
+  o := iif.NxD(IvOrganization, 'Wks');
+  Result := Format('%s/Organization/%1s/%s/%sLogoInv.png', [srv.Url, o, o, o]);
+end;
+{$ENDREGION}
+
 {$REGION 'TLgtCls'}
 constructor TLgtCls.Create(const IvFileSpec: string);
 var
@@ -5799,7 +9995,7 @@ end;
 
 procedure TLgtCls.O(IvObject: TObject; IvTag: string);
 begin
-  Tag('LOGOBJECT', NOT_IMPLEMENTED);
+  Tag('LOGOBJECT', NOT_IMPLEMENTED_STR);
 end;
 
 procedure TLgtCls.Q(IvSql, IvTag: string; IvOneLine: boolean);
@@ -6445,6 +10641,177 @@ begin
 end;
 {$ENDREGION}
 
+{$REGION 'TMbrRec'}
+function TMbrRec.BadgePath(IvMember: string): string;
+var
+  m: string;
+begin
+  m := iif.NxD(IvMember, Member);
+  Result := Format('%s\%s.png', [PathAlpha(m), m]);
+  if not FileExists(Result) then
+    img.DbaToDisk(Result, 'DbaMember.dbo.TblMember', 'FldBadge', Format('FldMember = ''%s''', [m]));
+//Result := '/WksImageIsapiProject.dll/Image?CoFrom=Member&CoName=' + IvMember;
+end;
+
+function TMbrRec.BadgeUrl(IvMember: string): string;
+var
+  m: string;
+begin
+  m := iif.NxD(IvMember, Member);
+  Result := Format('%s/%s.png', [UrlAlpha(m), m]);
+end;
+
+function TMbrRec.CanDelete(IvResource: string): boolean;
+begin
+  Result := true;
+end;
+
+function TMbrRec.CanEdit(IvResource: string): boolean;
+begin
+  Result := true;
+end;
+
+function TMbrRec.CanInsert(IvResource: string): boolean;
+begin
+  Result := true;
+end;
+
+function TMbrRec.CanView(IvResource: string): boolean;
+begin
+  Result := true;
+end;
+
+function TMbrRec.DbaSelect(var IvFbk: string): boolean;
+begin
+  IvFbk  := NOT_IMPLEMENTED_STR;
+  Result := false;
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
+
+//Member        := ;
+//Role          := ;
+//Level         := ;
+//Email         := ;
+//Phone         := ;
+//Authorization := ;
+end;
+
+function TMbrRec.Grade: integer;
+begin
+  // system
+       if (Role = rol.ROLE_SYSTEM)                                                  then Result := rol.GRADE_SYSTEM
+
+  // architect
+  else if (Role = rol.ROLE_ARCHITECT)                                               then Result := rol.GRADE_ARCHITECT
+
+  // administrator, match just the 1st 5 chars to allow role = admin(istator)
+  else if str.Match(Role, rol.ROLE_ADMINISTRATOR, 5) and (Level = rol.LEVEL_LOW)    then Result := rol.GRADE_ADMINISTRATOR_LOW
+  else if str.Match(Role, rol.ROLE_ADMINISTRATOR, 5) and (Level = rol.LEVEL_NORMAL) then Result := rol.GRADE_ADMINISTRATOR_NORMAL
+  else if str.Match(Role, rol.ROLE_ADMINISTRATOR, 5) and (Level = rol.LEVEL_HIGH)   then Result := rol.GRADE_ADMINISTRATOR_HIGH
+
+  // manager
+  else if (Role = rol.ROLE_MANAGER)                  and (Level = rol.LEVEL_LOW)    then Result := rol.GRADE_MANAGER_LOW
+  else if (Role = rol.ROLE_MANAGER)                  and (Level = rol.LEVEL_NORMAL) then Result := rol.GRADE_MANAGER_NORMAL
+  else if (Role = rol.ROLE_MANAGER)                  and (Level = rol.LEVEL_HIGH)   then Result := rol.GRADE_MANAGER_HIGH
+
+  // supervisor
+  else if (Role = rol.ROLE_SUPERVISOR)               and (Level = rol.LEVEL_LOW)    then Result := rol.GRADE_SUPERVISOR_LOW
+  else if (Role = rol.ROLE_SUPERVISOR)               and (Level = rol.LEVEL_NORMAL) then Result := rol.GRADE_SUPERVISOR_NORMAL
+  else if (Role = rol.ROLE_SUPERVISOR)               and (Level = rol.LEVEL_HIGH)   then Result := rol.GRADE_SUPERVISOR_HIGH
+
+  // member
+  else if (Role = rol.ROLE_MEMBER)                   and (Level = rol.LEVEL_LOW)    then Result := rol.GRADE_MEMBER_LOW
+  else if (Role = rol.ROLE_MEMBER)                   and (Level = rol.LEVEL_NORMAL) then Result := rol.GRADE_MEMBER_NORMAL
+  else if (Role = rol.ROLE_MEMBER)                   and (Level = rol.LEVEL_HIGH)   then Result := rol.GRADE_MEMBER_HIGH
+
+  // guest
+  else                                                                                   Result := rol.GRADE_GUEST;
+end;
+
+function TMbrRec.Info: string;
+begin
+  Result := Format('%s@%s', [Member, Organization]);
+end;
+
+function TMbrRec.IsAdmin: boolean;
+begin
+  Result := Grade >= rol.GRADE_ADMINISTRATOR_LOW; // Role = ROLE_ADMINISTRATOR
+end;
+
+function TMbrRec.IsAdminHigh: boolean;
+begin
+  Result := Grade = rol.GRADE_ADMINISTRATOR_HIGH; // Result := (Role = rol.ROLE_ADMINISTRATOR) and (Level = rol.LEVEL_HIGH);
+end;
+
+function TMbrRec.IsAuthorized(IvResource: string; var IvFbk: string): boolean;
+begin
+  Result := Authorization.Contains(IvResource)
+         or Authorization.StartsWith('All')
+         or sys.ADMIN_CSV.Contains(Member);
+  if Result then
+    IvFbk := Format('%s is authorized for %s', [Member, IvResource])
+  else
+    IvFbk := Format('%s is not authorized for %s', [Member, IvResource]);
+end;
+
+function TMbrRec.IsGuest: boolean;
+begin
+  Result := Grade >= rol.GRADE_GUEST;
+end;
+
+function TMbrRec.IsManager: boolean;
+begin
+  Result := Grade >= rol.GRADE_MANAGER_LOW;
+end;
+
+function TMbrRec.IsMember: boolean;
+begin
+  Result := Grade >= rol.GRADE_MEMBER_LOW;
+end;
+
+function TMbrRec.IsOwner: boolean;
+begin
+  Result := Member = org.Owner;
+end;
+
+function TMbrRec.IsSupervisor: boolean;
+begin
+  Result := Grade >= rol.GRADE_SUPERVISOR_LOW;
+end;
+
+function TMbrRec.IsWksAdmin: boolean;
+begin
+  Result := sys.ADMIN_CSV.Contains(Member);
+end;
+
+function TMbrRec.MemberAtOrganization: string;
+begin
+  Result := Format('%s@%s', [Member, LowerCase(Organization)]);
+end;
+
+function TMbrRec.PathAlpha(IvMember: string): string;
+var
+  m: string;
+begin
+  m := iif.NxD(IvMember, Member);
+  Result := Format('%s\%s', [sys.MEM_DIR, UpperCase(m[1])]);
+end;
+
+function TMbrRec.RioInit(IvMember, IvOrganization: string; var IvFbk: string): boolean;
+begin
+  IvFbk  := NOT_IMPLEMENTED_STR;
+  Result := false;
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
+end;
+
+function TMbrRec.UrlAlpha(IvMember: string): string;
+var
+  m: string;
+begin
+  m := iif.NxD(IvMember, Member);
+  Result := srv.ObjUrl('Member', UpperCase(m[1]));
+end;
+{$ENDREGION}
+
 {$REGION 'TMesRec'}
 procedure TMesRec.About;
 var
@@ -6670,6 +11037,144 @@ begin
   finally
     FreeAndNil(r);
   end;
+end;
+{$ENDREGION}
+
+{$REGION 'TNamRec'}
+function TNamRec.Co(IvName: string): string;
+var
+  a: string;
+begin
+  a := CoRemove(IvName);
+  Result := 'Co' + Std(a);
+end;
+
+function TNamRec.CoRemove(IvName: string): string;
+var
+  a: string;
+begin
+  // zip
+  a := IvName;
+
+  // exit
+  if a.StartsWith('Code')
+  or a.StartsWith('Computer') then
+    Exit;
+
+  // go
+  while a.StartsWith('Co') do
+    Delete(a, 1, 2);
+  Result := a;
+end;
+
+function TNamRec.CoRnd(IvPrefix: string; IvLenght: integer): string;
+begin
+  Result := 'Co' + Rnd(IvLenght);
+end;
+
+function TNamRec.HasNum(IvName: string): boolean;
+var
+  l: integer;
+begin
+  l := Length(IvName);
+  Result := l > 0;
+  if not Result then
+    Exit;
+  Result := CharInSet(IvName[Length(IvName)], ['0'..'9']);
+end;
+
+function TNamRec.IsNumOf(IvName, IvBase: string): boolean;
+begin
+  Result := IvName.StartsWith(IvBase, true);
+end;
+
+function TNamRec.NumBasePart(IvName: string): string;
+var
+  i: integer;
+  c: char;
+begin
+  Result := '';
+  for i := 1 to Length(IvName) do begin
+    c := IvName[i];
+    if CharInSet(c, ['A'..'z']) then
+      Result := Result + c
+    else
+      Exit;
+  end;
+end;
+
+function TNamRec.NumCodePart(IvName: string): string;
+var
+  i: integer;
+  c: char;
+begin
+  Result := '';
+  for i := Length(IvName) downto 1 do begin
+    c := IvName[i];
+    if CharInSet(c, ['0'..'9']) then
+      Result := c + Result
+    else
+      Exit;
+  end;
+end;
+
+function TNamRec.NumNext(IvName: string): string;
+var
+  i: integer;
+  b, c: string;
+begin
+  b := nam.NumBasePart(IvName);
+  c := nam.NumCodePart(IvName);
+  i := StrToInt(c) + 1;
+  Result := b + IntToStr(i);
+end;
+
+function TNamRec.NumPrev(IvName: string): string;
+var
+  i: integer;
+  b, c: string;
+begin
+  b := nam.NumBasePart(IvName);
+  c := nam.NumCodePart(IvName);
+  i := StrToInt(c) - 1;
+  Result := b + IntToStr(i);
+end;
+
+function TNamRec.Rnd(IvLenght: integer): string;
+var
+  r: TRndRec;
+begin
+  Result := str.Proper(r.Str(IvLenght));
+end;
+
+function TNamRec.RndCsv(IvListLenght, IvNameLenght: integer): string;
+var
+  i: integer;
+begin
+  Result := '';
+  for i := 0 to IvListLenght-1 do
+    Result := Result + ', ' + Rnd(IvNameLenght);
+  Delete(Result, 1, 2);
+end;
+
+function TNamRec.RndPostfix(IvPostfix: string; IvLenght: integer): string;
+begin
+  Result := Rnd(IvLenght) + IvPostfix;
+end;
+
+function TNamRec.RndPrefix(IvPrefix: string; IvLenght: integer): string;
+begin
+  Result := IvPrefix + Rnd(IvLenght);
+end;
+
+function TNamRec.Std(IvName, IvPostfix: string): string;
+begin
+  if IvName = '' then
+    Result := Rnd
+  else
+    Result := IvName;
+  if IvPostfix <> '' then
+    Result := Result + IvPostfix;
 end;
 {$ENDREGION}
 
@@ -7020,48 +11525,63 @@ end;
 
 function TObjRec.RioExists(IvObject, IvIdOrPath: string; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapParamExists(IvIdOrPath, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TObjRec.RioContentGet(IvObject, IvIdOrPath, IvDefault: string): string;
 begin
   Result := '';
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TObjRec.RioContentSet(IvObject, IvIdOrPath, IvValue: string): boolean;
 begin
   Result := false;
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TObjRec.RioParamGet(IvObject, IvIdOrPath: string; IvDefault: string): string;
 var
   k: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  {o :=} (rio.HttpRio as ISystemSoapMainService).SystemSoapParamGet(IvIdOrPath, Result, IvDefault, k);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TObjRec.RioParamSet(IvObject, IvIdOrPath: string; IvValue: string): boolean;
 var
   k: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  {o :=} (rio.HttpRio as ISystemSoapMainService).SystemSoapParamSet(IvIdOrPath, IvValue, k);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TObjRec.RioSwitchGet(IvObject, IvIdOrPath: string; IvDefault: boolean): boolean;
 begin
   Result := false;
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TObjRec.RioSwitchSet(IvObject, IvIdOrPath: string; IvValue: boolean): boolean;
 begin
   Result := false;
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 {$ENDREGION}
 
@@ -7298,7 +11818,7 @@ end;
 
 function TOrgRec.DskInit(var IvFbk: string): boolean;
 begin
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TOrgRec.EmailD(var IvFbk: string; IvToCsv, IvCcCsv, IvBcCsv, IvSubject, IvTitle, IvContent: string; IvSaveToDba: boolean): boolean;
@@ -7432,8 +11952,14 @@ var
 begin
   r := TOrgRem.Create;
   try
+    Screen.Cursor := crHourGlass;
+    try
     // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapOrganizationGet(IvOrganization, r, IvFbk);
+    finally
+      Screen.Cursor := crDefault;
+    end;
+
     if Result then begin
       Organization := r.Organization;
       Acronym      := r.Acronym     ;
@@ -7534,10 +12060,127 @@ begin
 end;
 {$ENDREGION}
 
+{$REGION 'TPerRec'}
+function TPerRec.DbaSelect(IvDba: TDbaCls; var IvFbk: string; IvInsertIfNotExist: boolean): boolean;
+var
+  q: string;
+  d: TFDDataSet;
+begin
+
+  {$REGION 'InsertIfNotExist'}
+//  if IvInsertIfNotExist then
+//    if not DbaExists(IvFbk) then begin
+//      Init(Surname, Name);
+//      DbaInsert(IvFbk);
+//      lg.I(IvFbk, TAG);
+//    end;
+  {$ENDREGION}
+
+  {$REGION 'Check'}
+  Result := HasKey(IvFbk);
+  if not Result then
+    Exit;
+  {$ENDREGION}
+
+  try
+
+    {$REGION 'Dba'}
+  //q := 'select * from DbaPerson.dbo.TblPerson where FldPerson = ''' + Person + '''';
+    q :=           'select p.FldId, -1 as FldPId, u.FldUsername as FldPerson, FldName, FldSurname, FldEmail'
+    + sLineBreak + 'from DbaPerson.dbo.TblPerson p inner join'
+    + sLineBreak + '     DbaUser.dbo.TblUser u on (u.FldId = p.FldId)'
+    + sLineBreak + 'where u.FldUsername = ''' + Person + '''';
+    //lg.Q(q, TAG);
+    Result := IvDba.DsFD(q, d, IvFbk);
+    //lg.Ds(d);
+    try
+      Id           := d.FieldByName('FldId'         ).AsInteger;
+      PId          := d.FieldByName('FldPId'        ).AsInteger;
+      Person       := d.FieldByName('FldPerson'     ).AsString;
+      Name         := d.FieldByName('FldName'       ).AsString;
+      Surname      := d.FieldByName('FldSurname'    ).AsString;
+      Email        := d.FieldByName('FldEmail'      ).AsString;
+    finally
+      FreeAndNil(d);
+    end;
+    {$ENDREGION}
+
+    IvFbk  := 'Person selected';
+    Result := true;
+
+  except
+    on e: Exception do begin
+      IvFbk  := str.E(e);
+      Result := false;
+    end;
+  end;
+end;
+
+function TPerRec.FullName: string;
+begin
+  Result := Format('%s %s', [Name, Surname]);
+end;
+
+function TPerRec.HasKey(var IvFbk: string): boolean;
+begin
+  Result := Person <> '';
+  if Result then
+    IvFbk := Format('Person has key %s', [Person])
+  else
+    IvFbk := 'Person has no valid key';
+end;
+
+function TPerRec.PathAlpha(IvPerson: string): string;
+var
+  p: string;
+begin
+  p := iif.NxD(IvPerson, Person);
+  Result := Format('%s\%s', [sys.PER_DIR, UpperCase(p[1])]);
+end;
+
+function TPerRec.PicturePath(IvPerson: string): string;
+var
+  p: string;
+begin
+  p := iif.NxD(IvPerson, Person);
+  Result := Format('%s\%s.png', [PathAlpha(p), p]);
+  if not FileExists(Result) then
+    img.DbaToDisk(Result, 'DbaPerson.dbo.TblPerson', 'FldPicture', Format('FldPerson = ''%s''', [p]));
+//Result := '/WksImageIsapiProject.dll/Image?CoFrom=Person&CoName=' + IvPerson;
+end;
+
+function TPerRec.PictureUrl(IvPerson: string): string;
+var
+  p: string;
+begin
+  p := iif.NxD(IvPerson, Person);
+  Result := Format('%s/%s.png', [UrlAlpha(p), p]);
+end;
+
+function TPerRec.SoapServerInfo(var IvFbk: string): boolean;
+begin
+  Screen.Cursor := crHourGlass;
+  try
+    // TEMPORARYCOMMENT
+//    Result := (rio.HttpRio as IPersonSoapMainService).PersonSoapInfo(IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+function TPerRec.UrlAlpha(IvPerson: string): string;
+var
+  p: string;
+begin
+  p := iif.NxD(IvPerson, Person);
+  Result := srv.ObjUrl('Person',  '/' + UpperCase(p[1]));
+end;
+{$ENDREGION}
+
 {$REGION 'TPopRec'}
 function TPopRec.DbaSelect(var IvFbk: string): boolean;
 begin
-  IvFbk  := NOT_IMPLEMENTED;
+  IvFbk  := NOT_IMPLEMENTED_STR;
   Result := false;
 
   Host          := '';
@@ -7553,8 +12196,14 @@ function TPopRec.RioInit(IvOrganization: string; var IvFbk: string): boolean;
 var
   h, p, u, w: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
  // TEMPORARYCOMMENT
 //   Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapPop3Get(IvOrganization, h, p, u, w, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+
   if Result then begin
     Organization  := IvOrganization;
     Host          := h;
@@ -7586,6 +12235,221 @@ begin
   IvSoapConnection.Proxy    := Format('%s:%s', [Address, Port]);
   IvSoapConnection.Username := Username;
   IvSoapConnection.Password := Password;
+end;
+{$ENDREGION}
+
+{$REGION 'TPwdRec'}
+function TPwdRec.DbaChange(IvOrganization, IvUsername, IvPasswordOld, IvPasswordNew: string; var IvFbk: string): boolean;
+begin
+  IvFbk  := NOT_IMPLEMENTED_STR;
+  Result := false;
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
+end;
+
+function TPwdRec.DbaMatch(IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean;
+begin
+  IvFbk  := NOT_IMPLEMENTED_STR;
+  Result := false;
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
+end;
+
+function TPwdRec.Decode(IvPassword: string): string;
+var
+  s, t: string;
+begin
+  s := IvPassword;
+  t := str.Reverse(s);
+  Result := str.CharShift(t, +1);
+end;
+
+function TPwdRec.Encode(IvPassword: string): string;
+var
+  s, t: string;
+begin
+  s := IvPassword;
+  t := str.CharShift(s, -1);
+  Result := str.Reverse(t);
+end;
+
+function TPwdRec.Generate(IvLength: integer; IvUseLower, IvUseUpper, IvUseNumber, IvUseWierd: boolean): string;
+var
+  i: byte;
+  s: string;
+begin
+  // init
+  Randomize;
+  Result := '';
+  s := '';
+
+  // chars
+  if IvUseUpper  then s :=     'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; // if you want to use the 'A..Z' characters
+  if IvUseLower  then s := s + 'abcdefghijklmnopqrstuvwxyz'; // if you want to use the 'a..z' characters (also)
+  if IvUseNumber then s := s + '0123456789';                 // if you want to use the '0..9' characters (also)
+  if IvUseWierd  then s := s + '_@#$%^&+-*{[()]};:<>\|/?';   // if you want to use the '@..?' characters (also)
+  if s = '' then
+    Exit;
+
+  // return
+  for i := 0 to IvLength-1 do
+    Result := Result + s[Random(Length(s){-1})+1];
+end;
+
+function TPwdRec.GenerateWord(IvLanguage: string; var IvPassword, IvFbk: string): boolean;
+//var
+//  r: TWordRem;
+begin
+  // get with spaces
+//r := TWordRem.Create;
+//Result := WordDbaSelectRnd(r, IvFbk);
+//if Result then begin
+//  if      IvLanguage = 'Spanish' then
+//    IvPassword := r.Spanish
+//  else if IvLanguage = 'Italian' then
+//    IvPassword := r.Italian
+//  else if IvLanguage = 'German' then
+//    IvPassword := r.German
+//  else if IvLanguage = 'French' then
+//    IvPassword := r.French
+//  else
+//    IvPassword := r.English;
+//end else
+//  IvPassword := RndPassword;
+//r.Free;
+
+  // get no spaces
+  IvPassword := 'Word'; // WordDbaSelectRnd2(IvLanguage, IvPassword, IvFbk);
+
+  // clean
+  IvPassword := IvPassword.Replace(' ', '');
+  IvPassword := IvPassword.Replace('-', '');
+  IvPassword := IvPassword.Replace('''', '');
+  IvPassword := IvPassword.Replace('`', '');
+  IvPassword := IvPassword.Replace('à', 'a');
+  IvPassword := IvPassword.Replace('á', 'a');
+  IvPassword := IvPassword.Replace('â', 'a');
+  IvPassword := IvPassword.Replace('ã', 'a');
+  IvPassword := IvPassword.Replace('ä', 'a');
+  IvPassword := IvPassword.Replace('å', 'a');
+  IvPassword := IvPassword.Replace('æ', 'a');
+  IvPassword := IvPassword.Replace('ç', 'c');
+  IvPassword := IvPassword.Replace('è', 'e');
+  IvPassword := IvPassword.Replace('é', 'e');
+  IvPassword := IvPassword.Replace('ê', 'e');
+  IvPassword := IvPassword.Replace('ë', 'e');
+  IvPassword := IvPassword.Replace('ì', 'i');
+  IvPassword := IvPassword.Replace('í', 'i');
+  IvPassword := IvPassword.Replace('î', 'i');
+  IvPassword := IvPassword.Replace('ï', 'i');
+  IvPassword := IvPassword.Replace('ð', 'o');
+  IvPassword := IvPassword.Replace('ñ', 'n');
+  IvPassword := IvPassword.Replace('ò', 'o');
+  IvPassword := IvPassword.Replace('ó', 'o');
+  IvPassword := IvPassword.Replace('ô', 'o');
+  IvPassword := IvPassword.Replace('õ', 'o');
+  IvPassword := IvPassword.Replace('ö', 'o');
+  IvPassword := IvPassword.Replace('ø', '');
+  IvPassword := IvPassword.Replace('ù', 'u');
+  IvPassword := IvPassword.Replace('ú', 'u');
+  IvPassword := IvPassword.Replace('û', 'u');
+  IvPassword := IvPassword.Replace('ü', 'u');
+  IvPassword := IvPassword.Replace('ý', 'y');
+  IvPassword := IvPassword.Replace('þ', 'b');
+  IvPassword := IvPassword.Replace('ÿ', 'y');
+
+  // end
+  IvFbk := Format('Password %s lite generated', [IvPassword]);
+  Result := true;
+end;
+
+function TPwdRec.IsSecure(IvPassword: string; var IvFbk: string): boolean;
+begin
+  Result := Length(IvPassword) >= PWD_MIN_LEN;
+  IvFbk := fbk.IsSecureStr('Password', IvPassword, Result);
+  if not Result then
+    IvFbk := IvFbk + Format(', it have to be at least %d digits', [IvPassword, PWD_MIN_LEN]);
+end;
+
+function TPwdRec.RioChange(IvOrganization, IvUsername, IvPasswordOld, IvPasswordNew: string; var IvFbk: string): boolean;
+begin
+  Screen.Cursor := crHourGlass;
+  try
+  // TEMPORARYCOMMENT
+//  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapPasswordChange(IvOrganization, IvUsername, IvPasswordOld, IvPasswordNew, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+function TPwdRec.RioRecover(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
+begin
+  Screen.Cursor := crHourGlass;
+  try
+  // TEMPORARYCOMMENT
+//  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapPasswordRecover(IvOrganization, IvUsername, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+function TPwdRec.RioReset(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
+begin
+  Screen.Cursor := crHourGlass;
+  try
+  // TEMPORARYCOMMENT
+//  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapPasswordReset(IvOrganization, IvUsername, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+function TPwdRec.StrongScore(IvPassword: string; var IvFbk: string): integer;
+begin
+  // length
+  if Length(IvPassword) > 8 then
+    Result := 5
+  else begin
+    IvFbk := 'Password must be 8 or more characters long';
+    Result := 0;
+    Exit;
+  end;
+
+  // haslower
+  if TRegEx.IsMatch(IvPassword, '[a-z]') then
+    Result := Result + 1
+  else begin
+    IvFbk := 'Password need to have at least 1 lowercase character';
+    Result := 0;
+    Exit;
+  end;
+
+  // hasupper
+  if TRegEx.IsMatch(IvPassword, '[A-Z]') then
+    Result := Result + 3
+  else begin
+    IvFbk := 'Password need to have at least 1 uppercase character';
+    Result := 0;
+    Exit;
+  end;
+
+  // hasdigit
+  if not TRegEx.IsMatch(IvPassword, '\d') then
+    Result := Result + 1
+  else begin
+    IvFbk := 'Password need to have at least 1 digit character';
+    Result := 0;
+    Exit;
+  end;
+
+  // haswierd
+  if not TRegEx.IsMatch(IvPassword, '[_@#$%^&+-*{[()]};:<>\|/?]') then
+    Result := Result + 1
+  else begin
+    IvFbk := 'Password need to have at least one of the following character: _@#$%^&+-*{[()]};:<>\|/?';
+    Result := 0;
+  end;
+
+  // end
+  IvFbk := Format('Password is strong enough with score %d', [Result]);
 end;
 {$ENDREGION}
 
@@ -7792,26 +12656,46 @@ end;
 {$REGION 'TRioRec'}
 function TRioRec.FieldGet(const IvDot: string; IvId: integer; var IvValue: variant; IvDefault: variant; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapFieldGet(usr.Organization, usr.Username, ses.Session, IvDot, IvId, IvValue, IvDefault, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TRioRec.FieldGetWhere(const IvDot: string; IvWhere: string; var IvValue: variant; IvDefault: variant; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapFieldGetWhere(usr.Organization, usr.Username, ses.Session, IvDot, IvWhere, IvValue, IvDefault, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TRioRec.FieldSet(const IvDot: string; IvId: integer; const IvValue: variant; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapFieldSet(usr.Organization, usr.Username, ses.Session, IvDot, IvId, IvValue, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TRioRec.FieldSetWhere(const IvDot: string; IvWhere: string; const IvValue: variant; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapFieldSetWhere(usr.Organization, usr.Username, ses.Session, IvDot, IvWhere, IvValue, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TRioRec.HttpRio(IvObj: string): THTTPRIO;
@@ -7859,20 +12743,35 @@ end;
 
 function TRioRec.IdExists(const IvDot: string; IvId: integer; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapIdExists(IvDot, IvId, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TRioRec.IdMax(const IvTable, IvWhere: string; var IvIdMax: integer; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapIdMax(IvTable, IvWhere, IvIdMax, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TRioRec.IdNext(const IvTable, IvWhere: string; var IvIdNext: integer; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapIdNext(IvTable, IvWhere, IvIdNext, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TRioRec.IdOf(const IvDot, IvKeyFld, IvKeyValue: string; var IvId: integer; var IvFbk: string): boolean;
@@ -7927,8 +12826,13 @@ end;
 
 function TRioRec.OIdIdExists(const IvDot, IvOFld: string; IvOId, IvId: integer; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapOIdIdExists(IvDot, IvOFld, IvOId, IvId, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TRioRec.RioUrl(IvObj: string): string;
@@ -7969,6 +12873,1239 @@ begin
     s := s + c[n];
   end;
   Result := s;
+end;
+{$ENDREGION}
+
+{$REGION 'TRvaRec'}
+function TRvaRec.RvFunction2(IvDba: TDbaCls; f, a: TStringVector): string;
+var
+  i, id: integer; // counter, id
+  wv: TTkvVec; // webrequest
+  a0, fc, q, k: string; // a[0], f[0]+f[1]+...
+begin
+
+  {$REGION 'init'}
+  Result := '';
+
+  if length(f) = 0 then
+    Exit;
+
+  if length(a) = 0 then
+    SetLength(a, 1);
+
+  fc := vec.Collapse(f);
+  {$ENDREGION}
+
+  {$REGION 'Contact'}
+  if SameText(f[0], 'Contact') then begin
+
+    {$REGION 'Default'}
+    if iis.Nx(a[0]) then
+      a[0] := org.Organization;
+    {$ENDREGION}
+
+    {$REGION 'FromDba'}
+    q := Format('select Fld%s from DbaContact.dbo.TblContact where FldOwner = ''%s'' and FldOrder = 0', [f[1], a[0]]);
+    Result := IvDba.ScalarFD(q, '', k);
+    {$ENDREGION}
+
+//else if  f.StartsWith('Contact') then begin
+//       if  f = 'ContactId'                          then r := AvCtcRec.Id.ToString
+//  else if  f = 'ContactPId'                         then r := AvCtcRec.PId.ToString
+//  else if  f = 'ContactOwner'                       then r := AvCtcRec.Owner
+//  else if  f = 'ContactContact'                     then r := AvCtcRec.Contact
+//  else if  f = 'ContactState'                       then r := AvCtcRec.State
+//  else if  f = 'ContactAddress'                     then r := AvCtcRec.Address
+//  else if  f = 'ContactPhone'                       then r := AvCtcRec.Phone
+//  else if  f = 'ContactFax'                         then r := AvCtcRec.Fax
+//  else if  f = 'ContactMobile'                      then r := AvCtcRec.Mobile
+//  else if  f = 'ContactEmail'                       then r := AvCtcRec.Email
+//  else if  f = 'ContactMap'                         then r := AvCtcRec.Map
+//  else if  f = 'ContactOrder'                       then r := AvCtcRec.Order.ToString
+//  ;
+//end
+  {$ENDREGION}
+
+  {$REGION 'dat'}
+  end else if SameText(f[0], 'Dat') then begin
+
+    {$REGION 'Default'}
+    {$ENDREGION}
+
+    {$REGION 'dat'}
+//       if  fc = 'DatTimeRnd'                                                  then Result := TimeToStr(dat.TimeRnd) // [RvDtNow(+/-float)] ex: [RvDtNow(7)] -> Now+7 , [RvDtNow(-14.54)] -> Now-14.54
+//  else if  fc = 'DatDateRnd'                                                  then Result := DateToStr(dat.DateRnd)
+//  else if  fc = 'DatDateTimeRnd'                                              then Result := DateTimeToStr(dat.DateTimeRnd)
+    // now
+//  else if  fc = 'DatTimeNow'                                                  then Result := TimeToStr(dat.TimeNow(StrToFloatDef(a[0], 0.0)))
+//  else if  fc = 'DatDateNow'                                                  then Result := DateToStr(dat.DateNow(StrToFloatDef(a[0], 0.0)))
+//  else if (fc = 'DatDateTimeNow') or (f = 'Now')                              then Result := DateTimeToStr(dat.DateTimeNow(StrToFloatDef(a[0], 0.0)))
+//  else if  fc = 'DatNowCode'                                                  then Result := dat.DateTimeToCode(Now)
+    // year
+         if  fc = 'DatYearNow'                                                  then Result := dat.YearNow(StrToIntDef(a[0], 0)).ToString
+    else if  fc = 'DatYearStart'                                                then Result := NOT_IMPLEMENTED_STR
+    else if  fc = 'DatYearEnd'                                                  then Result := NOT_IMPLEMENTED_STR
+    // quarter
+    else if  fc = 'DatQuarterNow'                                               then Result := NOT_IMPLEMENTED_STR
+    else if  fc = 'DatQuarterStart'                                             then Result := NOT_IMPLEMENTED_STR
+    else if  fc = 'DatQuarterEnd'                                               then Result := NOT_IMPLEMENTED_STR
+    // month
+//  else if  fc = 'DatMonthNow'                                                 then Result := dat.MonthNow(StrToIntDef(a[0], 0)).ToString
+    else if  fc = 'DatMonthStart'                                               then Result := NOT_IMPLEMENTED_STR
+    else if  fc = 'DatMonhtEnd'                                                 then Result := NOT_IMPLEMENTED_STR
+    // week
+//  else if  fc = 'DatWeekNow'                                                  then Result := dat.WeekNow(StrToIntDef(a[0], 0)).ToString
+    else if  fc = 'DatWeekDay'                                                  then Result := NOT_IMPLEMENTED_STR
+    else if  fc = 'DatWeekStart'                                                then Result := NOT_IMPLEMENTED_STR
+    else if  fc = 'DatWeekEnd'                                                  then Result := NOT_IMPLEMENTED_STR
+    // day
+    else if  fc = 'DatDayNow'                                                   then Result := NOT_IMPLEMENTED_STR // RvDay() -> actualday, RvDay(-3) -> actualday-3, RvDay('09/16/2016 11:00:00') -> 16
+    else if  fc = 'DatDayStart'                                                 then Result := NOT_IMPLEMENTED_STR
+    else if  fc = 'DatDayEnd'                                                   then Result := NOT_IMPLEMENTED_STR
+    // timing
+  //else if  fc = 'DatElapsedSec'                                               then Result := FloatToStr(--FWat.ElapsedMilliseconds / 1000) *** no, use local ***
+    ;
+    {$ENDREGION}
+
+  {$ENDREGION}
+
+  {$REGION 'htm'}
+  end else if SameText(f[0], 'Htm') then begin
+
+    {$REGION 'Report'}
+    if          SameText(f[1], 'Report') then begin
+      Result := htm.Report(IvDba, a[0].ToInteger);
+    {$ENDREGION}
+
+    {$REGION 'Select'}
+    end else if SameText(f[1], 'Select') then begin
+      Result := NOT_IMPLEMENTED_STR;
+    end;
+    {$ENDREGION}
+
+  {$ENDREGION}
+
+  {$REGION 'org'}
+  end else if SameText(f[0], 'Organization') or SameText(f[0], 'Org') then begin
+
+    {$REGION 'Default'}
+    if length(f) = 1 then begin // transform [RvOrganization()] into [RvOrganizationOrganization()]
+      SetLength(f, 2);
+      f[1] := f[0];
+    end;
+    {$ENDREGION}
+
+    {$REGION 'FromDba'}
+  //id := db0.HIdFromIdOrPath('DbaOrganization.dbo.TblOrganization', 'FldOrganization', a[0]);         // [RvOrganizationSlogan()]
+    id := org.Id;                                                                                      // [RvOrganizationField(Root/W/Wks, Slogan)]
+    q := Format('select Fld%s from DbaOrganization.dbo.TblOrganization where FldId = %d', [f[1], id]);
+    Result := IvDba.ScalarFD(q, '', k);
+    {$ENDREGION}
+
+  {$ENDREGION}
+
+  {$REGION 'Page'}
+  end else if SameText(f[0], 'Page') then begin
+
+    {$REGION 'Default'}
+    {
+    if length(f) = 1 then begin // transform [RvPage()] into [RvPageContent()]
+      SetLength(f, 2);
+      f[1] := 'Url';
+    //f[1] := 'Content';
+    end;
+    }
+    {$ENDREGION}
+
+    {$REGION 'Url'}
+    if          SameText(f[1], 'Url') then begin
+      if str.IsInteger(a[0]) then
+        Result := Format('%s/Page?CoId=%s', [wre.ScriptName, a[0]])  // [RvPageUrl(123)]
+      else if str.IsPath(a[0]) then
+        Result := Format('%s/Page?CoId=%s', [wre.ScriptName, a[0]])  // [RvPageUrl(Root/Organization/W/Wks/Home)] / [RvPageUrl(/Home)]
+      else
+        Result := Format('%s/%s'          , [wre.ScriptName, a[0]]); // handle explicit webactions like localhost/WksIsapiProject.dll/Info or /Login
+    {$ENDREGION}
+
+    {$REGION 'FromDba'}
+    end else begin
+      id := IvDba.HIdFromIdOrPath('DbaPage.dbo.TblPage', 'FldPage', a[0]);
+      q := Format('select Fld%s from DbaPage.dbo.TblPage where FldId = %d', [f[1], id]);
+      Result := IvDba.ScalarFD(q, '', k);
+    end;
+    {$ENDREGION}
+
+    {$REGION 'Zzz'}
+    {
+         if  f = 'Page'             then r := '?CoId=' + a[0]                                          // 123 | Root/Organization/W/Wks
+  //else if  f = 'PageSystem'       then r := '?CoId=' + a[0]                                          //
+    else if  f = 'PageTemplate'     then r := '?CoId=Root/Template/' + a[0]                            // + Default/About
+    else if  f = 'PageOrganization' then r := Format('?CoId=Root/Organization/%s/%s', [a[0][1], a[0]]) // + Wks/About
+    end;
+    }
+    {$ENDREGION}
+
+  {$ENDREGION}
+
+  {$REGION 'sys'}
+  end else if SameText(f[0], 'Sys') then begin
+
+    {$REGION 'Param'}
+    if          SameText(f[1], 'Param') then begin
+      if not a[0].StartsWith('Root/System/Param/', true) then
+        a0 := 'Root/System/Param/' + a[0];
+      Result := obj.DbaParamGet('System', a0, a[1]);
+    {$ENDREGION}
+
+    {$REGION 'Switch'}
+    end else if SameText(f[1], 'Switch') then begin
+      Result := BoolToStr(obj.DbaSwitchGet('System', a0, StrToBool(a[1])));
+    end;
+    {$ENDREGION}
+
+  {$ENDREGION}
+
+  {$REGION 'wre'}
+  end else if SameText(f[0], 'Wre') then begin
+
+    {$REGION 'Client'}
+    if         SameText(f[1], 'Client') then begin
+      if SameText(f[2], 'Addr') then
+        Result := wre.ClientAddr
+      ;
+    {$ENDREGION}
+
+    {$REGION 'Field'}
+    end else if SameText(f[1], 'Field') then begin
+      wv := wre.TkvVec;
+      for i := Low(wv) to High(wv) do begin
+        if SameText(a[0], wv[i].Key) then begin
+          Result := wv[i].Val;
+          Break
+        end;
+      end;
+    {$ENDREGION}
+
+    {$REGION 'Script'}
+    end else if SameText(f[1], 'Script') then begin
+      if      SameText(f[2], 'Name') then
+        Result := wre.ScriptName
+      ;
+    {$ENDREGION}
+
+    {$REGION 'User'}
+    end else if SameText(f[1], 'User') then begin
+      if      SameText(f[2], 'Name') then
+        Result := wre.Username
+      else if SameText(f[2], 'Organization') then
+        Result := wre.UserOrganization
+      ;
+    end;
+    {$ENDREGION}
+
+  end;
+  {$ENDREGION}
+
+end;
+
+function TRvaRec.RvFunction(IvDba: TDbaCls; IvFunction, IvArgsList: string): string;
+
+  {$REGION 'var'}
+var
+  i0, i1, i2, i3: integer; // spare
+  b0, b1, b2, b3, ok: boolean; // spare
+  f, r, s, n, t, l, w, h, m, x, v, u, o, k: string; // func, return, switch, id, name, title, level, width, height, method, action, validator, defaults, optionjson
+  q, qs, qi, qd, df: string; // sql, server, instance, databasedef, default
+  tbl, id, pid, fc: string; // table, id, pid, fieldcsv
+  a: TStringVector; // argsvect
+  d: TDataSet; //dei: TEdiRec; // dataset, editinfo
+//p: TPageRec;
+  {$ENDREGION}
+
+begin
+
+  {$REGION 'zip'}
+  r := '';
+  f := IvFunction;
+  {$ENDREGION}
+
+  {$REGION 'args'}
+  a := lst.ToVector(IvArgsList, '|'); // max 12
+  if Length(a) < 12 then
+    SetLength(a, 12);
+  {$ENDREGION}
+
+  {$REGION 'byn'}
+  if       f.StartsWith('App') or f.StartsWith('Byn') or (f = 'Version') then begin
+         if  f = 'BynInfo'                                                      then r := byn.Info
+    else if  f = 'BynCmds'                                                      then r := byn.Cmds
+    else if (f = 'BynVersion') or (f = 'AppVersion') or (f = 'Version')         then r := byn.Ver
+    else if  f = 'BynFileSpec'                                                  then r := byn.FileSpec
+    else if  f = 'BynName'                                                      then r := byn.Name
+    else if  f = 'BynNameNice'                                                  then r := byn.NameNice
+    else if  f = 'BynRole'                                                      then r := byn.Role
+    else if  f = 'BynInfo'                                                      then r := byn.Info
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'cod'}
+  else if  f.StartsWith('Code') then begin
+         if  f = 'CodeUrl'                                                      then r := '/WksCodeIsapiProject.dll/Code?CoCodeId=' + a[0]
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'col'}
+ {else if  f.StartsWith('Color') then begin
+         if  f = 'Color'                                                        then r := ColorFromName(a[0]).ToHexString // [RvColor(red)]
+    else if  f = 'ColorAgg'                                                     then r := ColorAggFromName(a[0])          // [RvColorAgg(red)]
+    else if  f = 'ColorHtml'                                                    then r := ColorHtmlFromName(a[0])         // [RvColorHtml(red)]
+  end}
+  {$ENDREGION}
+
+  {$REGION 'cry'}
+  else if  f.StartsWith('Crypto') then begin
+         if  f = 'CryptoCipher'                                                 then r := cry.Cipher(a[0])
+    else if  f = 'CryptoDecipher'                                               then r := cry.Decipher(a[0])
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'css'}
+  else if  f.StartsWith('Css') then begin
+         if  f = 'CssLogoSize'                                                  then r := '48' // AvCssRec.LogoSize // + a[0]
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'db0'}
+  else if  f.StartsWith('Db0') then begin
+//         if  f = 'DbaSaUsername'                      then r := sys.DBA_SA
+//    else if  f = 'DbaSaPassword'                      then r := sys.DBA_SA_PASSWORD
+//  //else if Like(f, 'Dba*.Tbl*.Fld*') and IsNumeric(a[0]) then r := 'value of FieldZ in record Id in table DbaX.TableY' // [RvDbaX.TblY.FldZ(Id)]
+           if f = 'Db0Scalar' then begin
+      q  := a[0]; // sql
+      df := a[1]; // default
+      qs := a[2]; // sqlserver
+      qi := a[3]; // sqlinstance
+      qd := a[4]; // sqldefaultdb
+      r := IvDba.ScalarFD(q, df, k);
+    end;
+  end
+  {$ENDREGION}
+
+  {$REGION 'fsy'}
+//  else if  f.StartsWith('fsy') then begin
+//         if  f = 'FsyPathWinToC'                                                 then r := fsy.PathWinToC(a[0])  // X:\$Tmp --> X:\\$Tmp
+//    else if  f = 'FsyPathCToWin'                                                 then r := fsy.PathCToWin(a[0]); // X:\\$Tmp --> X:\$Tmp
+//    ;
+//  end
+  {$ENDREGION}
+
+  {$REGION 'htm'}
+  (*else if  f.StartsWith('H') then begin
+         if  f = 'HBlog'                                                        then r := HBlog(a[0], a[1], a[2], a[3])     // [HBlog(giarussi|Title|Text|switches)]
+    {
+      [RvHForm(
+        13                                       // IvId: string
+      |                                          // IvDefaultsJson: string = ''
+      | Test Form                                // IvTitle: string = ''
+      |                                          // IvSwitch: string = ''
+      | /SysIsapiProject.dll/FormProcess?CoId=2  // IvAction: string = ''
+      |                                          // IvMethod: string = 'post'
+      |                                          // IvEnctype: string = ''
+      |                                          // IvValidator: string = 'data-toggle="validator"
+      )]
+    }
+    else if  f = 'HForm'                                                        then r := HForm(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7])
+    else if  f = 'HGallery'                                                     then r := HGallery(a[0]) // [HGallery(dummy)]
+    else if  f = 'HGraph'                                                       then begin // [RvHGraph(sqlorid| title| level| width| height| idname| switches| sqlserver| sqlinstance| sqldefaultdb)]
+      // params                                                  // [RvHGraph(SqlRepo:Test|Test Graph|1|240|120|CoGraph)]
+      q := a[0];   // sqlorid
+//      if str.Has(q, 'SqlRepo:') then
+//        q := SqlRepo(q);
+    //lg.Q(q, 'RVGRAPH');
+      t   := a[1]; // title
+      l   := a[2]; // level 0=h1,1=h2...
+      w   := a[3]; // width
+      h   := a[4]; // height
+      n   := a[5]; // idname
+      s   := a[6]; // switch
+      qs  := a[7]; // sqlserver
+      qi  := a[8]; // sqlinstance
+      qd  := a[9]; // sqldefaultdb
+      // dba
+      try
+        ok := db0.DsFD(q, d, k);
+        if not ok then
+          r := k // HAlertW(k)
+        else begin
+        //LogDs(d, 'Info');
+          r := HGraph(d, t, StrToIntDef(l, 1), w, h, n, s);
+        //lg.I(r);
+        end;
+      finally
+        d.Free;
+      end;
+    end
+    else if  f = 'HImg'                                                         then r := HImg(a[0], a[1], a[2], a[3]) // [RvHImg(source| alt| link| switches)]
+    else if  f = 'HPanel'                                                       then r := HPanel(a[0], a[1], a[2], a[3], a[4])       // [RvHPanel(body| header| header2| footer| switches)]
+    else if  f = 'HCollaps'                                                     then r := HCollaps(a[0], a[1], a[2].ToInteger, a[3]) // [RvHCollaps(header| body| level| switches:[+b=button, def=h1])]
+    else if  f = 'HProgress'                                                    then r := HProgress(a[0].ToInteger, a[1], a[2], a[3], a[4])
+    else if  f = 'HRepeat'                                                      then begin // [HRepeat(html-template-with-$FldAaa$| Sql)]
+      t := a[0]; // template
+      q := a[1];
+//      if str.Has(q, 'SqlRepo:') then
+//        q := SqlRepo(q);
+      q := Rv(q); // *** recursive ***
+    //lg.Q(q, 'RVHREPEAT');
+      try
+        ok := db0.DsFD(q, d, k);
+        if (not ok) or (d.IsEmpty) then
+          r := k // HAlertW(k)
+        else begin
+        //LogDs(d, 'Info');
+          r := HRepeat(t, d);
+        //lg.I(r);
+        end;
+      finally
+        d.Free;
+      end;
+    end
+    else if  f = 'HReport'                                                      then r := HReport(a[0], a[1]) // [HReport(id| switches)]
+    else if  f = 'HTable'                                                       then begin // [RvHTable(sqloridords | editinfo| title    | idname    | level| switches| sqlserver| sqlinstance| sqldefaultdb)]
+      // params                                      // [RvHTable(SqlRepo:Test|         |Test Table|CoTestTable|2     |-#)]
+      q := a[0];                                     // sqloridords
+//      if str.Has(q, 'SqlRepo:') then
+//        q := SqlRepo(q);
+    //lg.Q(q, 'RVHTABLE');
+      dei.LoadFrom(false, '', '', '', '', a[1], ''); // editinfo | dataseteditinfo, incomplete, for now just the legacy editini
+      t   := a[2];                                   // title
+      n   := a[3];                                   // idname
+      l   := a[4];                                   // level 0=h1,1=h2...
+      s   := a[5];                                   // switch
+      qs  := a[6];                                   // sqlserver
+      qi  := a[7];                                   // sqlinstance
+      qd  := a[8];                                   // sqldefaultdb
+      // dba
+      try
+        ok := db0.DsFD(q, d, k);
+        if not ok then
+          r := k // HAlertW(k)
+        else begin
+        //LogDs(d, 'Info');
+          r := HTable(d, dei, t, n, '', '', StrToIntDef(l, 1), s);
+        //lg.I(r);
+        end;
+      finally
+        d.Free;
+      end;
+    end
+    else if  f = 'HTreeView'                                                    then begin // [RvHTreeView(0.table                  |1.fieldscsv           |2.rootid|3.optionjson                                  |4.editinfo|5.title |6.coname  |7.level|8.switches|9.sqlserver|10.sqlinstance|11.sqldefaultdb)]
+      // params                                                  // [RvHTreeView(DbaMember.dbo.TblActivity|FldActivity as FldText|100     |{backColor: "#FFFFFF", borderColor: "#FF0000"}|          |TreeView|CoTreeView|2      )]
+      tbl := a[0];                                   // table
+      fc  := ',' + iif.NxD(a[1], 'FldText');          // fieldcsv
+      while Pos(', ', fc) > 0 do
+        fc  := str.Replace(fc, ', ', ',');
+      fc  := str.Replace(fc, ',', ', a.');
+      id  := a[2];                                   // rootid
+      q   :=         'with cte as ('                 // sql
+      + sLineBreak + '    select a.FldId, a.FldPId, FldState,            0 as FldLevel, cast(a.FldId as varchar(255))                                         as FldPath' + fc + ' from ' + tbl + ' a where FldId = ' + id
+      + sLineBreak + '    union all'
+      + sLineBreak + '    select a.FldId, a.FldPId, a.FldState, FldLevel+1 as FldLevel, cast(FldPath + ''.'' + cast(a.FldId as varchar(255)) as varchar(255)) as FldPath' + fc + ' from ' + tbl + ' a inner join cte b on (a.FldPId = b.FldId)'
+      + sLineBreak + ')'
+      + sLineBreak + 'select * from cte order by  FldLevel, FldText'; // FldPath - , replicate('-', FldLevel * 4) + FldActivity
+    //lg.Q(q, 'RVHTREEVIEW');
+      o   := a[3];                                   // optionjson
+      dei.LoadFrom(false, '', '', '', '', a[4], ''); // editinfo | dataseteditinfo, incomplete, for now just the legacy editini
+      t   := a[5];                                   // title
+      n   := a[6];                                   // coname
+      l   := a[7];                                   // level 0=h1,1=h2...
+      s   := a[8];                                   // switch
+      qs  := a[9];                                   // sqlserver
+      qi  := a[10];                                  // sqlinstance
+      qd  := a[11];                                  // sqldefaultdb
+      // dba
+      try
+        ok := c.Ds(q, d, k, false, 60);
+        if not ok then
+          r := k // HAlertW(k)
+        else begin
+        //LogDs(d, 'Info');
+        //if iis.Nx(t) then
+          //t := d.FieldByName('FldText').AsString;
+          r := HTreeView(d, StrToIntDef(id, -1), o, dei, t, n, '', '', StrToIntDef(l, 1), s, '');
+        //lg.I(r);
+        end;
+      finally
+        d.Free;
+      end;
+    end
+    else if  f = 'HH'                                                           then r := HH(a[0], a[1], a[2])                   // [HH(title| subtitle| switches)]
+    else if  f = 'HTextLevel'                                                   then r := HTextLevel(a[0], StrToIntDef(a[1], 0)) // [HTextLevel(text| level)]
+    else if  f = 'HP'                                                           then r := HP(a[0], a[1])                         // [HP(text| switches)]
+    else if  f = 'HTypo'                                                        then r := HTypo(a[0], a[1])                      // [HTypo(text| switches)]
+    else if (f = 'HUnderconstruction') or (f = 'ComingSoon') then r := HComingSoon(a[0], a[1])         // [RvHComingSoon(Jan 5, 2019 15:37:25, this page is underconstruction)]
+    else if  f = 'HWordify'                                                     then r := HWordify(StrToIntDef(a[0], -1), StrToIntDef(a[1], -1), StrToIntDef(a[2], -1), a[3], a[4], a[5])
+    ;
+  end*)
+  {$ENDREGION}
+
+  {$REGION 'ico'}
+//else if f.StartsWith('Icon') then begin
+//  else if  f = 'IconSpec'                        then r := app.IconSpec
+//  else if  f = 'IconUrl'                         then r := app.IconUrl
+//  ;
+//end
+  {$ENDREGION}
+
+  {$REGION 'iif'}
+  else if  f = 'Iif'                                  then begin
+                                                           r := iif.Str(str.ToBool(a[0]), a[1], a[2])
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'img'}
+ {else if  f.StartsWith('Image') then begin
+         if  f = 'ImageId'                            then r := AvImgRec.Id
+    else if  f = 'ImagePId'                           then r := AvImgRec.PId
+    else if  f = 'ImageState'                         then r := AvImgRec.Image
+    else if  f = 'ImageOrganization'                  then r := AvImgRec.Organization
+    else if  f = 'ImageUsername'                      then r := AvImgRec.Username
+    else if  f = 'Image'                              then r := AvImgRec.Image
+    else if  f = 'ImagePath'                          then r := AvImgRec.Path
+    else if  f = 'ImageUrl'                           then r := AvImgRec.Url
+    else if  f = 'ImageBinary'                        then r := AvImgRec.Binary
+    ;
+  end}
+  {$ENDREGION}
+
+  {$REGION 'lic'}
+ {else if  f.StartsWith('License') then begin
+         if  f = 'LicenseKey'                         then r := AvLicRec.Key
+    else if  f = 'LicenseIniKeyBase'                  then r := AvLicRec.KeyBase
+    else if  f = 'LicenseIniDateMax'                  then r := DateToStr(AvLicRec.DateMax)
+    else if  f = 'LicenseIniItemMax'                  then r := AvLicRec.ItemMax.ToString
+    else if  f = 'LicenseIniUsagemax'                 then r := AvLicRec.UsageMax.ToString
+    else if  f = 'LicenseIgnore'                      then r := AvLicRec.Ignore.ToString
+    else if  f = 'LicenseIsValid'                     then r := AvLicRec.IsValid(k).ToString
+  end}
+  {$ENDREGION}
+
+  {$REGION 'logo'}
+  else if f.StartsWith('Logo') then begin
+         if  f = 'LogoSpec'                                                     then r := lgo.Spec
+    else if  f = 'LogoUrl'                                                      then r := lgo.Url
+    else if  f = 'LogoInvSpec'                                                  then r := lgo.InvSpec
+    else if  f = 'LogoInvUrl'                                                   then r := lgo.InvUrl
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'lorem'}
+  {else if  f.StartsWith('Lorem') then begin
+         if  f = 'LoremTitle'                         then begin // [RvLoremTitle(3| 6| 1| false)]
+      i0 := StrToIntDef(a[0], 4);
+      i1 := StrToIntDef(a[1], 8);
+      i2 := StrToIntDef(a[2], 1);
+      b1 := StrToBoolDef(a[3], false);
+      r  := TLoremRec.Title(i0, i1, i2, b1);
+
+    end else if  f = 'LoremParagraphs'                then begin // [RvLoremParagraphs(1| 3| 12| 24)]
+      i0 := StrToIntDef(a[0], 1);
+      i1 := StrToIntDef(a[1], 4);
+      i2 := StrToIntDef(a[2], 16);
+      i3 := StrToIntDef(a[3], 32);
+      r  := TLoremRec.Paragraphs(i0, i1, i2, i3);
+
+    end else if  f = 'LoremHTitle'                    then begin // [RvLoremTitle(3| 6| 1| false)]
+      i0 := StrToIntDef(a[0], 4);
+      i1 := StrToIntDef(a[1], 8);
+      i2 := StrToIntDef(a[2], 0);
+      i3 := StrToIntDef(a[2], 1);
+      b1 := StrToBoolDef(a[3], false);
+      r  := TLoremRec.HTitle(i0, i1, i2, i3, b1);
+
+    end else if  f = 'LoremHParagraphs'               then begin // [RvLoremParagraphs(1| 3| 12| 24)]
+      i0 := StrToIntDef(a[0], 1);
+      i1 := StrToIntDef(a[1], 4);
+      i2 := StrToIntDef(a[2], 16);
+      i3 := StrToIntDef(a[3], 32);
+      r  := TLoremRec.HParagraphs(i0, i1, i2, i3);
+    end;
+  end}
+  {$ENDREGION}
+
+  {$REGION 'lst'}
+  else if  f.StartsWith('List') then begin
+         if  f = 'ListFormRange'                      then r := lst.FromRangeInt(a[0], StrToBool(a[1]), StrToInt(a[2]), a[3]) // range, leadzero, itemlen, sourrandingchar, useful in where Fldxxx not in (^)
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'mbr'}
+  else if  f.StartsWith('Member') then begin
+  //else if  f = 'MemberId'                                                     then r := mbr.Id.ToString
+  //else if  f = 'MemberPId'                                                    then r := mbr.PId.ToString
+         if  f = 'MemberOrganization'                                           then r := mbr.Organization
+    else if  f = 'Member'                                                       then r := mbr.Member
+    else if  f = 'MemberRole'                                                   then r := mbr.Role
+    else if  f = 'MemberLevel'                                                  then r := mbr.Level
+    else if  f = 'MemberEmail'                                                  then r := mbr.Email
+    else if  f = 'MemberPhone'                                                  then r := mbr.Phone
+  //else if  f = 'MemberBadge'                                                  then r := mbr.Badge
+    else if  f = 'MemberGrade'                                                  then r := mbr.Grade.ToString
+  //else if  f = 'MemberNumber'                                                 then r := mbr.Number.ToString
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'mrk'}
+//  else if (f = 'Markdown') or (f = 'HtmlFromText') or (f = 'TextToHtml') then begin
+//                                                           r := Markdown(a[0], StrAsBool(a[1])) // r := HtmlFromText(a[0], StrAsBool(a[1]))
+//    ;
+//  end
+  {$ENDREGION}
+
+  {$REGION 'nam'}
+  else if  f.StartsWith('Name') then begin
+         if  f = 'NameRnd'                                                      then r := nam.Rnd(StrToIntDef(a[0], 4))
+    else if  f = 'nam.Co'                                                       then r := nam.Co(a[0])
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'net'}
+  else if  f.StartsWith('Net') or (f = 'IpLan') or (f = 'IpWan') then begin
+         if  f = 'NetHost'                                                      then r := net.Host
+    else if (f = 'NetIpLan') or (f = 'IpLan')                                   then r := net.IpLan
+    else if (f = 'NetIpWan') or (f = 'IpWan')                                   then r := net.IpWan
+    else if  f = 'NetDomain'                                                    then r := net.Domain
+    else if  f = 'NetComputer'                                                  then r := net.Host
+    else if  f = 'NetOsLogin'                                                   then r := net.OsLogin
+  //else if  f = 'NetLocation'                                                  then r := net.Location
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'org'}
+  else if  f.StartsWith('Organization') then begin
+         if  f = 'Organization'                                                 then r := iif.NxD(a[0], org.Organization)
+  //else if  f = 'OrganizationId'                                               then r := org.Id.ToString
+  //else if  f = 'OrganizationPId'                                              then r := org.PId.ToString
+    else if  f = 'OrganizationState'                                            then r := org.State
+    else if  f = 'OrganizationWww'                                              then r := org.Www
+    else if  f = 'OrganizationExpire'                                           then r := DateTimeToStr(org.Expire)
+    else if  f = 'OrganizationOwner'                                            then r := iif.NxD(a[0], org.Owner)
+    else if  f = 'OrganizationSlogan'                                           then r := iif.NxD(a[0], org.Slogan)
+    else if  f = 'OrganizationAbout'                                            then r := iif.NxD(a[0], org.About)
+    else if  f = 'OrganizationPhone'                                            then r := org.Phone
+    else if  f = 'OrganizationFax'                                              then r := org.Fax
+    else if  f = 'OrganizationEmail'                                            then r := org.Email
+    else if  f = 'OrganizationAddress'                                          then r := org.Address
+    else if  f = 'OrganizationZipCode'                                          then r := org.ZipCode
+    else if  f = 'OrganizationCity'                                             then r := org.City
+    else if  f = 'OrganizationProvince'                                         then r := org.Province
+    else if  f = 'OrganizationCountry'                                          then r := org.Country
+    else if  f = 'OrganizationSsn'                                              then r := iif.ExP(org.Ssn, a[0])
+    else if  f = 'OrganizationVatNumber'                                        then r := iif.ExP(org.VatNumber, a[0])
+    else if  f = 'OrganizationLegalName'                                        then r := org.LegalName
+    else if  f = 'OrganizationSymbol'                                           then r := iif.NxD(a[0], org.Symbol)
+    else if  f = 'OrganizationApiKey'                                           then r := org.Symbol
+    else if  f = 'OrganizationNetwork'                                          then r := iif.NxD(a[0], org.Network)
+    else if  f = 'OrganizationPageFooter'                                       then r := org.PageFooter
+    else if  f = 'OrganizationEmailTemplate'                                    then r := org.EmailTemplate
+  //else if  f = 'OrganizationCss'                                              then r := org.Css
+  //else if  f = 'OrganizationLogo'                                             then r := org.Logo
+  //else if  f = 'OrganizationLogoInv'                                          then r := org.LogoInv
+    else if  f = 'OrganizationBgColor'                                          then r := org.BgColor
+    else if  f = 'OrganizationFgColor'                                          then r := org.FgColor
+    else if  f = 'OrganizationBorderColor'                                      then r := org.BorderColor
+    else if  f = 'OrganizationColor'                                            then r := org.Color
+    else if  f = 'OrganizationColor2'                                           then r := org.Color2
+    else if  f = 'OrganizationInfoColor'                                        then r := org.InfoColor
+    else if  f = 'OrganizationSuccessColor'                                     then r := org.SuccessColor
+    else if  f = 'OrganizationWarningColor'                                     then r := org.WarningColor
+    else if  f = 'OrganizationDangerColor'                                      then r := org.DangerColor
+    else if  f = 'OrganizationJson'                                             then r := org.Json
+    else if  f = 'OrganizationPageSwitch'                                       then r := org.PageSwitch
+    else if  f = 'OrganizationInfo'                                             then r := org.Info
+  //else if  f = 'OrganizationToJson'                                           then r := org.ToJson
+    else if  f = 'OrganizationCopyright'                                        then r := org.Copyright
+    else if  f = 'OrganizationRegistryPath'                                     then r := org.RegistryPath
+    else if  f = 'OrganizationTreePath'                                         then r := org.TreePath
+    else if  f = 'OrganizationDiskPath'                                         then r := org.DiskPath
+    else if  f = 'OrganizationUrl'                                              then r := org.Url
+    else if  f = 'OrganizationHomeUrl'                                          then r := org.HomeUrl
+    else if  f = 'OrganizationIconPath'                                         then r := org.IconPath
+    else if  f = 'OrganizationIconUrl'                                          then r := org.IconUrl
+    else if  f = 'OrganizationLogoPath'                                         then r := org.LogoPath
+    else if  f = 'OrganizationLogoUrl'                                          then r := org.LogoUrl
+    else if  f = 'OrganizationLogoInvPath'                                      then r := org.LogoInvPath
+    else if  f = 'OrganizationLogoInvUrl'                                       then r := org.LogoInvUrl
+    else if  f = 'OrganizationLogoSmallPath'                                    then r := org.LogoSmallPath
+    else if  f = 'OrganizationLogoSmallUrl'                                     then r := org.LogoSmallUrl
+    else if  f = 'OrganizationLogoSmallInvPath'                                 then r := org.LogoSmallInvPath
+    else if  f = 'OrganizationLogoSmallInvUrl'                                  then r := org.LogoSmallInvUrl
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'os'}
+  {else if f.StartsWith('Os') then begin
+         if  f = 'Os'                                                           then r := ops.Os
+    else if  f = 'OsVersion'                                                    then r := ops.Version
+    ;
+  end}
+  {$ENDREGION}
+
+  {$REGION 'pwd'}
+  else if  f.StartsWith('Password') then begin
+         if  f = 'PasswordGenerate'                   then r := pwd.Generate(StrToInt(a[0]), str.ToBool(a[1]), str.ToBool(a[2]), str.ToBool(a[3])) // lenght, uselower, useupper, usenumber
+    else if  f = 'PasswordEncode'                     then r := pwd.Encode(a[0])
+    else if  f = 'PasswordDecode'                     then r := pwd.Decode(a[0])
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'per'}
+  else if  f.StartsWith('Person') then begin
+         if  f = 'PersonId'                                                     then r := per.Id.ToString
+    else if  f = 'PersonPId'                                                    then r := per.PId.ToString
+    else if  f = 'Person'                                                       then r := per.Person
+    else if  f = 'PersonName'                                                   then r := per.Name
+    else if  f = 'PersonSurname'                                                then r := per.Surname
+//  else if  f = 'PersonGender'                                                 then r := per.Gender
+//  else if  f = 'PersonNationality'                                            then r := per.Nationality
+//  else if  f = 'PersonLanguage'                                               then r := per.Language
+//  else if  f = 'PersonSsn'                                                    then r := per.Ssn
+//  else if  f = 'PersonVatNumber'                                              then r := per.VatNumber
+//  else if  f = 'PersonPhone'                                                  then r := per.Phone
+//  else if  f = 'PersonMobile'                                                 then r := per.Mobile
+    else if  f = 'PersonEmail'                                                  then r := per.Email
+//  else if  f = 'PersonWww'                                                    then r := per.Www
+//  else if  f = 'PersonAddress'                                                then r := per.Address
+//  else if  f = 'PersonZipCode'                                                then r := per.ZipCode
+//  else if  f = 'PersonCity'                                                   then r := per.City
+//  else if  f = 'PersonProvince'                                               then r := per.Province
+//  else if  f = 'PersonCountry'                                                then r := per.Country
+//  else if  f = 'PersonBirthDate'                                              then r := DateTimeToStr(per.BirthDate)
+//  else if  f = 'PersonBirthPlace'                                             then r := per.BirthPlace
+//  else if  f = 'PersonOfficePhone'                                            then r := per.OfficePhone
+//  else if  f = 'PersonOfficeMobile'                                           then r := per.OfficeMobile
+//  else if  f = 'PersonOfficeEmail'                                            then r := per.OfficeEmail
+//  else if  f = 'PersonOfficeWww'                                              then r := per.OfficeWww
+//  else if  f = 'PersonOfficeFax'                                              then r := per.OfficeFax
+  //else if  f = 'PersonPicture'                                                then r := per.Picture
+//  else if  f = 'PersonNote'                                                   then r := per.Note
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'rnd'}
+  else if  f.StartsWith('Rnd') then begin
+         if  f = 'RndStr'                             then r := rnd.Str(StrToInt(a[0]))
+//    else if  f = 'RndWord'                            then r := rnd.Word(StrToInt(a[0]), StrAsBool(a[1]))
+//    else if  f = 'RndPassword'                        then r := rnd.Password(StrToInt(a[0])) // plain
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'scripting'}
+  {else if  f.StartsWith('Py') or f.StartsWith('Dws') or f.StartsWith('R') then begin
+             if  f = 'PyEval' then begin
+      if not PyEval(a[0], r, k)  then r := k; // [RvPyEval(2+2)]
+    end else if  f = 'PyExec' then begin
+      if not PyExec(a[0], r, k)  then r := k; // [RvPyExec(print 2+2)]
+    end else if (f = 'DwsExec') or (f = 'PasExec') then begin
+      if not DwsExec(a[0], r, k) then r := k; // [RvDwsExec(var i: integer; for i := 0 to 9 do Print('text ');)]
+    end else if  f = 'RExec' then begin
+      if not RExec(a[0], r, k) then           // [RvRExec(iris)]
+        r := k;
+      if BoolFromStr(a[1]) then
+      //r := HPre(r);
+        r := HCollaps('Console', HCode(r), 4, '+CCtm-CCo');
+    end;
+  end}
+  {$ENDREGION}
+
+  {$REGION 'smt'}
+  else if  f.StartsWith('Smtp') then begin
+         if  f = 'SmtpOrganization'                                             then r := smt.Organization
+    else if  f = 'SmtpHost'                                                     then r := smt.Host
+    else if  f = 'SmtpPort'                                                     then r := smt.Port
+    else if  f = 'SmtpUsername'                                                 then r := smt.Username
+    else if  f = 'SmtpPassword'                                                 then r := smt.Password
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'sql'}
+  {else if  f.StartsWith('Sql') then begin
+         if (f = 'SqlElin') or (f = 'SqlEqualLikeInNot') then r := sql.Elin(a[0], a[1])   // [RvSqlElin(  FldAbc| $AValue$)]
+    else if  f = 'SqlFilter'                             then r := sql.Filter(a[0], a[1]) // [RvSqlFilter(FldAbc| $AValue$)] $AValue$ = [ Aaa | Aaa* | Aaa,Bbb,... | Aaa*,Bbb*,... | ^ xxx | xxx # | ^ xxx # ] xxx = one of the previous
+  end}
+  {$ENDREGION}
+
+  {$REGION 'srv <- website'}
+  else if  f.StartsWith('WebSite') then begin
+  //     if  f = 'WebSiteOrganization'                                          then r := srv.Organization
+         if  f = 'WebSiteAdminCsv'                                              then r := srv.AdminCsv
+    else if  f = 'WebSiteWww'                                                   then r := srv.Www
+    else if  f = 'WebSitePort'                                                  then r := srv.Port
+    else if  f = 'WebSiteProtocol'                                              then r := srv.Protocol
+//  else if  f = 'WebSiteWwwAuthenticate'                                       then r := srv.WwwAuthenticate
+    else if  f = 'WebSiteUrl'                                                   then r := srv.Url
+    else if  f = 'WebSiteIsapiUrl'                                              then r := isa.IsapiUrl(a[0])
+//  else if  f = 'WebSiteCodeIsapiUrl'                                          then r := srv.CodeIsapiUrl(a[0])
+//  else if  f = 'WebSiteDbaIsapiUrl'                                           then r := srv.DbaIsapiUrl(a[0])
+//  else if  f = 'WebSiteImageIsapiUrl'                                         then r := srv.ImageIsapiUrl(a[0])
+    else if  f = 'WebSitePageUrl'                                               then r := srv.PageUrl(a[0], a[1]) // id, tail
+//  else if  f = 'WebSiteFilerUrl'                                              then r := srv.FilerUrl(a[0])
+//  else if  f = 'WebSiteImageUrl'                                              then r := srv.ImageUrl(a[0])
+//  else if  f = 'WebSiteIncludeUrl'                                            then r := srv.IncludeUrl(a[0])
+    else if  f = 'WebSiteOrganizationUrl'                                       then r := srv.ObjUrl('Organization', a[0])
+//  else if  f = 'WebSitePersonUrl'                                             then r := srv.PersonUrl(a[0])
+//  else if  f = 'WebSitePhotoUrl'                                              then r := srv.PhotoUrl(a[0])
+//  else if  f = 'WebSiteUserUrl'                                               then r := srv.UserUrl(a[0])
+//  else if  f = 'WebSiteLoginUrl'                                              then r := srv.LoginUrl(a[0])
+//  else if  f = 'WebSiteLogoutUrl'                                             then r := srv.LogoutUrl(a[0])
+//  else if  f = 'WebSiteAuthenticateUrl'                                       then r := srv.AuthenticateUrl(a[0])
+//  else if  f = 'WebSiteUploadUrl'                                             then r := srv.UploadUrl(a[0])
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'sys'}
+  else if  f.StartsWith('Sys') or f.StartsWith('System') then begin
+         if  (f = 'SysAcronym'         ) or (f = 'SystemAcronym'         )      then r := sys.Acronym
+//  else if  (f = 'SysDescription'     ) or (f = 'SystemDescription'     )      then r := sys.Description
+    else if  (f = 'SysCopyright'       ) or (f = 'SystemCopyright'       )      then r := sys.RioCopyright
+    else if  (f = 'SysAuthor'          ) or (f = 'SystemAuthor'          )      then r := sys.Author
+    else if  (f = 'SysEmail'           ) or (f = 'SystemEmail'           )      then r := sys.Email
+    else if  (f = 'SysWww'             ) or (f = 'SystemWww'             )      then r := sys.Www
+//  else if  (f = 'SysAdmin'           ) or (f = 'SystemAdmin'           )      then r := sys.Admin
+//  else if  (f = 'SysAdminEmail'      ) or (f = 'SystemAdminEmail'      )      then r := sys.AdminEmail
+//  else if  (f = 'SysAdminPhone'      ) or (f = 'SystemAdminPhone'      )      then r := sys.AdminPhone
+//  else if  (f = 'SysNetworkUsername' ) or (f = 'SystemNetworkUsername' )      then r := sys.NetworkUsername
+//  else if  (f = 'SysNetworkPassword' ) or (f = 'SystemNetworkPassword' )      then r := sys.NetworkPassword
+//  else if  (f = 'SysNetworkEmail'    ) or (f = 'SystemNetworkEmail'    )      then r := sys.NetworkEmail
+//  else if  (f = 'SysOtpIsActive'     ) or (f = 'SystemOtpIsActive'     )      then r := sys.OtpIsActive.ToString
+    else if  (f = 'SysQuitUrl'         ) or (f = 'SystemQuitUrl'         )      then r := sys.QUIT_URL
+    else if  (f = 'SysUrl'             ) or (f = 'SystemUrl'             )      then r := sys.Url
+    else if  (f = 'SysInfo'            ) or (f = 'SystemInfo'            )      then r := sys.Info
+  //else if  (f = 'SysDisk'            ) or (f = 'SystemDisk'            )      then r := sys.Disk
+//  else if  (f = 'SysPath'            ) or (f = 'SystemPath'            )      then r := sys.Path
+  //else if  (f = 'SysAppPath'         ) or (f = 'SystemAppPath'         )      then r := sys.AppPath
+//  else if  (f = 'SysBackupPath'      ) or (f = 'SystemBackupPath'      )      then r := sys.BackupPath
+//  else if  (f = 'SysFilerPath'       ) or (f = 'SystemFilerPath'       )      then r := sys.FilerPath
+//  else if  (f = 'SysImagePath'       ) or (f = 'SystemImagePath'       )      then r := sys.ImagePath
+//  else if  (f = 'SysIncludePath'     ) or (f = 'SystemIncludePath'     )      then r := sys.IncludePath
+  //else if  (f = 'SysMoviePath'       ) or (f = 'SystemMoviePath'       )      then r := sys.MoviePath
+    else if  (f = 'SysOrganizationDir' ) or (f = 'SystemOrganizationDir' )      then r := sys.ORG_DIR
+//  else if  (f = 'SysPersonPath'      ) or (f = 'SystemPersonPath'      )      then r := sys.PerPath
+  //else if  (f = 'SysPicturePath'     ) or (f = 'SystemPicturePath'     )      then r := sys.PicturePath
+//  else if  (f = 'SysPhotoPath'       ) or (f = 'SystemPhotoPath'       )      then r := sys.PhotoPath
+//  else if  (f = 'SysResourcePath'    ) or (f = 'SystemResourcePath'    )      then r := sys.ResourcePath
+//  else if  (f = 'SysTempPath'        ) or (f = 'SystemTempPath'        )      then r := sys.TempPath
+//  else if  (f = 'SysUserPath'        ) or (f = 'SystemUserPath'        )      then r := sys.UserPath
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'usr'}
+  else if  f.StartsWith('User') or (f = 'Password') or (f = 'Avatar') or (f = 'Session') then begin
+         if (f = 'UserOrganization')                                            then r := usr.Organization
+    else if (f = 'UserUsername') or (f = 'Username')                            then r := usr.Username
+    else if (f = 'UserPassword') or (f = 'Password')                            then r := usr.Password
+    else if (f = 'UserState')                                                   then r := usr.State
+    else if (f = 'UserAvatar')   or (f = 'Avatar')                              then r := 'usr.Avatar'
+    else if (f = 'UserSession')  or (f = 'Session')                             then r := usr.Session
+    else if (f = 'UserJson')                                                    then r := usr.Json
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'wre'}
+  else if  f.StartsWith('Req') or f.StartsWith('Wre') then begin
+         if  f = 'WreDateTime'                                                  then r := DateTimeToStr(wre.DateTime)
+    else if  f = 'WreClientAddr'                                                then r := wre.ClientAddr
+    else if  f = 'WreClientHost'                                                then r := wre.ClientHost
+    else if  f = 'WreClientAccept'                                              then r := wre.ClientAccept
+    else if  f = 'WreClientAcceptEncoding'                                      then r := wre.ClientAcceptEncoding
+    else if  f = 'WreClientAcceptLanguage'                                      then r := wre.ClientAcceptLanguage
+    else if  f = 'WreClientApp'                                                 then r := wre.ClientApp
+    else if  f = 'WreClientAppVersion'                                          then r := wre.ClientAppVersion
+    else if  f = 'WreClientDoNotTrack'                                          then r := wre.ClientDoNotTrack
+    else if  f = 'WreClientTimezoneOffset'                                      then r := wre.ClientTimezoneOffset
+    else if  f = 'WreClientLanguage'                                            then r := wre.ClientLanguage
+    else if  f = 'WreClientPlatform'                                            then r := wre.ClientPlatform
+    else if  f = 'WreClientOs'                                                  then r := wre.ClientOs
+    else if  f = 'WreClientCpuCores'                                            then r := wre.ClientCpuCores
+    else if  f = 'WreClientScreen'                                              then r := wre.ClientScreen
+    else if  f = 'WreClientAudio'                                               then r := wre.ClientAudio
+    else if  f = 'WreClientVideo'                                               then r := wre.ClientVideo
+    else if  f = 'WreClientLocalStorage'                                        then r := wre.ClientLocalStorage
+    else if  f = 'WreClientSessionStorage'                                      then r := wre.ClientSessionStorage
+    else if  f = 'WreClientIndexedDb'                                           then r := wre.ClientIndexedDb
+    else if  f = 'WreClientFingerprint'                                         then r := wre.ClientFingerprint
+    else if  f = 'WreUserOrganization'                                          then r := wre.UserOrganization
+    else if  f = 'WreUserDomain'                                                then r := wre.UserDomain
+    else if  f = 'WreUserComputer'                                              then r := wre.UserComputer
+    else if  f = 'WreUsername'                                                  then r := wre.Username
+    else if  f = 'WreSession'                                                   then r := wre.Session
+    else if  f = 'WreOtp'                                                       then r := wre.Otp
+    else if  f = 'WreHttpOrigin'                                                then r := wre.HttpOrigin
+    else if  f = 'WreHttpProtocol'                                              then r := wre.HttpProtocol
+    else if  f = 'WreHttpMethod'                                                then r := wre.HttpMethod
+    else if  f = 'WreRequestId'                                                 then r := wre.RequestId.ToString
+    else if  f = 'WreConnection'                                                then r := wre.Connection
+    else if  f = 'WreHost'                                                      then r := wre.Host
+    else if  f = 'WreUrl'                                                       then r := wre.Url
+    else if  f = 'WrePathInfo'                                                  then r := wre.PathInfo
+    else if  f = 'WreQuery'                                                     then r := wre.Query
+    else if  f = 'WreServerAddr'                                                then r := wre.ServerAddr
+    else if  f = 'WreServerHost'                                                then r := wre.ServerHost
+    else if  f = 'WreServerPort'                                                then r := wre.ServerPort.ToString
+    else if  f = 'WreServerPortSecure'                                          then r := wre.ServerPortSecure.ToString
+    else if  f = 'WreServerSoftware'                                            then r := wre.ServerSoftware
+    else if  f = 'WreScriptName'                                                then r := wre.ScriptName
+    else if  f = 'WreScriptVer'                                                 then r := wre.ScriptVer
+    else if  f = 'WreTimingMs'                                                  then r := wre.TimingMs.ToString
+    ;
+  end
+  {$ENDREGION}
+
+  {$REGION 'web'}
+  {else if  f.StartsWith('Web') then begin
+         if  f = 'WebField'                           then WebField(AvWrqRec, a[0], r, a[1], k, false); // [RvWebField(CoAaa|Default)]
+    ;
+  end}
+  {$ENDREGION}
+
+  {$REGION 'NOTHINGFOUND'}
+  else {if r = '' then} begin
+    r := '?';
+  //r := '&#91;Rv' + f + '&#40;' + IvArgsList + '&#41;&#93; ' + NOT_FOUND;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'End'}
+  Result := r;
+  {$ENDREGION}
+
+end;
+
+function TRvaRec.Rv2(IvDba: TDbaCls; IvString: string; IvCommentRemove, IvEmptyLinesRemove, IvTrim: boolean): string;
+
+  {$REGION 'Var'}
+var
+  z: integer; // matchesreplaced
+  s, g, f, a, c: string; // str, group0, function, args, contentforreplacing
+  r: TRegEx;
+  m: TMatch;
+//g: TGroup;
+  {$ENDREGION}
+
+begin
+
+  {$REGION 'Init'}
+  z := 0;
+  s := IvString;
+  if IvTrim then s := Trim(s);
+  {$ENDREGION}
+
+  {$REGION 'CommentRemovePre'}
+  if IvCommentRemove then
+    str.CommentRemove(s);
+  {$ENDREGION}
+
+  {$REGION 'Exit'}
+  if not str.HasRex(s, rex.REX_RV_CHECK_PAT, [roIgnoreCase, roSingleLine]) then begin
+    Result := s;
+    Exit;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'Go'}
+  try
+    r := TRegEx.Create(rex.REX_RV_RECURSIVE_PAT, [roIgnoreCase, roSingleLine, roIgnorePatternSpace]);
+
+    // allmatches
+    m := r.Match(s);
+    z := m.Length;
+
+    // processmatches
+    z := 0;
+    while m.Success do begin
+
+      Inc(z);
+
+      {$REGION 'Zzz'}
+      // process the match
+      //LogFmt('grpcount: %d, idx: %d, len: %d, ok: %s, val: %s', [m.Groups.Count, m.Index, m.Length, BoolToStr(m.Success), m.Value]);
+      //LogFmt('grps: %d, val: %s', [m.Groups.Count, m.Value]);
+
+      // log
+      //for i := 0 to m.Groups.Count -1 do begin
+      //  g := m.Groups.Item[i];
+      //  LogFmt('grpid: %d, idx: %d, len: %d, val: %s', [i, g.Index, g.Length, g.Value]);
+      //end;
+      {$ENDREGION}
+
+      {$REGION 'groups->func+args OLD-NON-RECURSIVE'}
+      {
+      // simple [RvXxx()]
+      if m.Groups.Count = 3 then begin           // g0, g1, g2
+        f := m.Groups.Item[2].Value;
+        a := '';
+
+      // empty [RvXxx()] or full [RvXxx(aaa, bbb, ...)]
+      end else begin                             // g0, g1, g2, g3, g4
+        f := m.Groups.Item[3].Value;
+        a := m.Groups.Item[4].Value;
+
+      end;
+      }
+      {$ENDREGION}
+
+      {$REGION 'groups->func+args RECURSIVE'}
+      g := m.Groups.Item[0].Value;
+      f := m.Groups.Item[1].Value;
+      a := m.Groups.Item[2].Value;
+      //x := Format('[Rv%s%s]', [f, a]); // reconstruct tag, args not compiled
+      //if x = x2 then begin           // cache
+      //  m := m.NextMatch;
+      //  Continue
+      //end;
+      //x2 := x;
+      Delete(a, 1, 1); // remove 1st (
+      Delete(a, Length(a), 1); // remove last )
+      //LogFmt('func: %s', [f]);
+      //LogFmt('args: %s', [a]);
+      //LogFmt('tag : %s', [x]);
+      {$ENDREGION}
+
+      // recursively apply Rv() to eventual params
+      while rex.Has(a, rex.REX_RV_CHECK_PAT, [roIgnoreCase, roSingleLine]) do // str.Has(a, '[Rv')
+        a := Rv(IvDba, a);
+
+      // content
+      c := RvFunction(IvDba, f, a);
+
+      // replace
+      s := str.Replace(s, g, c); // IvString
+
+      // next
+      m := m.NextMatch;
+    end;
+
+    // recursively apply Rv() to eventual tags just inserted above
+    if rex.Has(s, rex.REX_RV_CHECK_PAT, [roIgnoreCase, roSingleLine]) then
+      s := Rv(IvDba, s);
+
+  except
+    on e: ERegularExpressionError do
+      Result := e.Message;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'CommentRemovePost'}
+  if IvCommentRemove then
+    str.CommentRemove(s);
+  {$ENDREGION}
+
+  {$REGION 'EmptyLinesRemove'}
+  if IvEmptyLinesRemove then
+    str.EmptyLinesRemove(s);
+  {$ENDREGION}
+
+  {$REGION 'End'}
+  Result := s;
+  {$ENDREGION}
+
+end;
+
+function TRvaRec.Rv(IvDba: TDbaCls; IvString: string; IvCommentRemove: boolean): string;
+type
+  TTag = record
+    Orig: string;
+    Func: string;
+    Args: string;
+  end;
+const
+  RV_PAT = '\[Rv(\w*?)(\((.*?)\))?\]';
+var
+  t: array of TTag; // tagvec
+  o, x: string; // origrv, funcresult
+  f, a: TStringVector; // funcvec, argsvec
+  r: TRegEx;
+  m: TMatch;
+  i: integer;
+begin
+  // tags
+  r := TRegEx.Create(RV_PAT);
+  m := r.Match(IvString);
+  i := -1;
+  while m.Success and (m.Groups.Count >= 1) do begin
+    SetLength(t, length(t)+1);
+    Inc(i);
+    if      m.Groups.Count = 2 then begin
+      t[i].Orig := m.Groups[0].Value;
+      t[i].Func := m.Groups[1].Value;
+      t[i].Args := '';
+    end else if m.Groups.Count = 4 then begin
+      t[i].Orig := m.Groups[0].Value;
+      t[i].Func := m.Groups[1].Value;
+      t[i].Args := m.Groups[3].Value;
+    end;
+    m := m.NextMatch;
+  end;
+
+  // init
+  Result := IvString;
+
+  // comments
+  if IvCommentRemove then
+    str.CommentRemove(Result);
+
+  // loop
+  for i := Low(t) to High(t) do begin
+    // init
+    o := t[i].Orig;
+    f := str.CamelToVec(t[i].Func);
+    a := vec.FromStr(t[i].Args, '|,;');
+
+    // funcresult
+    x := RvFunction2(IvDba, f, a);
+
+    // replace
+    if not iis.Ex(x) then begin
+      if obj.DbaSwitchGet('System', 'ShowUnknownRvTags', true) then begin
+        Result := str.Replace(Result, o, str.Replace(str.Replace(o, '[', '('), ']', ')'))
+      end else
+        Result := str.Replace(Result, o, '');
+    end else
+      Result := str.Replace(Result, o, x);
+  end;
+
+  // recursive
+  if Result.Contains('[Rv') then
+    Result := Rv(IvDba, Result, IvCommentRemove);
+end;
+
+function TRvaRec.RvDs(IvString: string; IvDs: TDataset): string;
+var
+  f: TStringVector;
+  v: TVariantVector;
+  i: integer;
+begin
+  dst.RecordToFldAndValueVectors(IvDs, f, v);
+  Result := IvString;
+  for i := Low(f) to High(f) do
+    Result := StringReplace(Result, '$'+f[i]+'$', vartostr(v[i]), [rfReplaceAll, rfIgnoreCase]);
+end;
+
+function TRvaRec.RvJ(IvString, IvJsonStr: string; IvReplaceFlag: TReplaceFlags): string;
+var
+  o{, o2}: superobject.ISuperObject; // givenobj, objinarray
+//  i: superobject.TSuperObjectIter; // item
+//i2: superobject.TSuperAvlEntry; // item
+//  a: superobject.TSuperArray; // aray
+//  n, v: string; // name, value
+//  j: integer;
+  IvResultRecursive: string;
+
+  procedure JsonObjectProcess(const IvAsObject: superobject.TSuperTableString; const IvPrefix: string = ''); // RECURSIVE
+  var
+    i: integer; // idx
+    n, v: string; // name, value
+    nv, vv: superobject.ISuperObject; // namevector, valuevector
+    i1, i2: superobject.ISuperObject; // itemvalue, vectoritem
+  begin
+    if Assigned(IvAsObject) then begin
+      nv := IvAsObject.GetNames;
+      vv := IvAsObject.GetValues;
+
+      for i := 0 to vv.AsArray.Length - 1 do begin
+        n := nv.AsArray[i].AsString;
+        i1 := vv.AsArray[i];
+        if i1.DataType = stObject then begin
+        //v := '<Object>';
+          JsonObjectProcess(i1.AsObject, IvPrefix + n + '.');
+        end else if i1.DataType = stArray then begin
+        //v := '<Array>';
+          for i2 in i1 do
+            JsonObjectProcess(i2.AsObject, IvPrefix + n + '.');
+        end else begin
+          v := i1.AsString;
+          if True then
+            v := str.Replace(v, '*', '%');
+        //IvResultRecursive := str.Replace  (IvResultRecursive, '$' + IvPrefix + n + '$', v); // '[RvAgent'+n+'()]'
+          IvResultRecursive := StringReplace(IvResultRecursive, '$' + IvPrefix + n + '$', v, IvReplaceFlag);
+        end;
+//        if i1.DataType = stArray then
+//        if i1.DataType = stObject then
+      end;
+    end;
+  end;
+
+begin
+  // before
+  IvResultRecursive := StringReplace(IvString, '$Json$', '***NOTALLOWED***', [rfReplaceAll, rfIgnoreCase]);
+
+  // jsonobject
+  o := superobject.SO(IvJsonStr);
+  JsonObjectProcess(o.AsObject);
+
+  // after
+  Result := IvResultRecursive;
+
+  {
+  if superobject.ObjectFindFirst(o, i) then begin
+    try
+      repeat
+        if (i.val.IsType(stArray)) then begin
+          a := i.val.AsArray;
+          for j := 0 to a.Length-1 do begin  //for j in a do begin
+            o2 := a.O[j];
+            // recursive ...
+          //RvJ(Result, ???);
+          end;
+        end else begin
+          n := i.key;
+          v := i.val.AsString;
+          Result := StrReplace(Result, '[RvAgent'+n+'()]', v);
+        end;
+      until not superobject.ObjectFindNext(i);
+    finally
+      superobject.ObjectFindClose(i);
+    end;
+  end;
+
+  for j := 0 to o.AsArray.Length-1 do begin
+    // the object in the array
+    a := o.AsArray[j].AsObject;
+
+    // 1 asobject
+//  for i1 in a.AsObject do begin
+//    n := i1.Name;
+//    v := i1.Value.AsString;
+//    IvString := StrReplace(IvString, '[Rv'+n+'()]', v);
+//  end;
+
+    // 2 browsing
+    if ObjectFindFirst(a, i2) then
+    repeat
+      n := i2.key;
+      v := i2.val.AsString;
+      IvString := StrReplace(IvString, '[Rv'+n+'()]', v);
+    until not ObjectFindNext(i2);
+    ObjectFindClose(i2);
+  end;
+  }
 end;
 {$ENDREGION}
 
@@ -8025,20 +14162,35 @@ begin
   end;
 
   // rio
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapSessionClose(IvOrganization, IvUsername, Session, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TSesRec.RioExists(IvOrganization, IvUsername, IvSession: string; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapSessionExists(usr.Organization, usr.Username, Session, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TSesRec.RioOpen(IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapSessionOpen(IvOrganization, IvUsername, IvPassword, net.Domain, net.Host, net.OsLogin, net.IpLan, net.IpWan, byn.Tag, byn.Ver, ses.Session, ses.BeginDateTime, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 
   // flag
   HasBeenOpen := Result;
@@ -8048,7 +14200,7 @@ end;
 {$REGION 'TSmtRec'}
 function TSmtRec.DbaSelect(var IvFbk: string): boolean;
 begin
-  IvFbk  := NOT_IMPLEMENTED;
+  IvFbk  := NOT_IMPLEMENTED_STR;
   Result := false;
 
   Host          := '';
@@ -8061,14 +14213,321 @@ function TSmtRec.RioInit(IvOrganization: string; var IvFbk: string): boolean;
 var
   h, p, u, w: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapSmtpGet(IvOrganization, h, p, u, w, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+
   if Result then begin
     Organization := IvOrganization; // Wks          , Lfoundry
     Host         := h;              // www.wks.cloud, aivmcas01.ai.sys.com
     Port         := p;              // 25           , 25
     Username     := u;
     Password     := w;
+  end;
+end;
+{$ENDREGION}
+
+{$REGION 'TSobRec'}
+function TSobRec.FromFileUTF8( const IvFileName: string): superobject.ISuperObject;
+var
+  input: TFileStream;
+  output: TStringStream;
+begin
+  input := TFileStream.Create(IvFileName, fmOpenRead, fmShareDenyWrite);
+  try
+     output := TStringStream.Create('');
+     try
+       output.CopyFrom(input, input.Size);
+//       Result := superobject.TSuperObject.ParseString(PWideChar(UTF8ToUTF16(output.DataString)), true, true);
+     finally
+       FreeAndNil(output);
+     end;
+  finally
+    FreeAndNil(input);
+  end;
+end;
+
+function TSobRec.ObjectInfo(const IvAsObject: superobject.TSuperTableString; var IvFbk: TFbkRec; const IvPrefix: string): string;
+var
+  ns, vs: superobject.ISuperObject;         // names, items
+  na: string; ij: superobject.ISuperObject; // name, item
+  v: string;                                // value
+  j: superobject.ISuperObject;              // arrayitem
+  i: integer;
+begin
+  // exit
+  if not Assigned(IvAsObject) then begin
+    Exit;
+  end;
+
+  // names-values
+  ns := IvAsObject.GetNames;
+  vs := IvAsObject.GetValues;
+
+  // loop
+  for i := 0 to vs.AsArray.Length - 1 do begin
+    // name-value
+    na := ns.AsArray[i].AsString;
+    ij := vs.AsArray[i];
+
+    if ij.DataType = stObject then
+      v := '<Object>'
+    else if ij.DataType = stArray then
+      v := '<Array>'
+    else
+      v := ij.AsString;
+
+    //if SameText(na, 'id') then
+      IvFbk.AddFmt('%s: %s', [IvPrefix + na, v]);
+
+    if ij.DataType = stArray then
+      for j in ij do
+        ObjectInfo(j.AsObject, IvFbk, IvPrefix + na + '.');
+
+    if ij.DataType = stObject then
+      ObjectInfo(ij.AsObject, IvFbk, IvPrefix + na + '.');
+  end;
+end;
+
+function TSobRec.Pretty(IvString: WideString): string;
+var
+  o: superobject.ISuperObject;
+begin
+  o := superobject.TSuperObject.ParseString(PWideChar(IvString), true);
+  if not Assigned(o) then
+    Result := ''
+  else
+    Result := o.AsJson(true, false); // here comes your result: pretty-print JSON
+end;
+
+function TSobRec.StrEscape(const IvString: string): string;
+//const
+//  ESCAPE          = '\';
+////QUOTATION_MARK  = '"'; //  double quote is replaced with \"
+//  SOLIDUS         = '/';
+//  REVERSE_SOLIDUS = '\'; //  backslash is replaced with \\
+//  BACKSPACE       = #8 ; //  backspace is replaced with \b
+//  FORM_FEED       = #12; //  form feed is replaced with \f
+//  NEW_LINE        = #10; //  newline is replaced with \n
+//  CARRIAGE_RETURN = #13; //  carriage return is replaced with \r
+//  HORIZONTAL_TAB  = #9 ; //  tab is replaced with \t
+var
+  i, ix: integer;
+  c: Char;
+
+  procedure AddChars(const AChars: string; var Dest: string; var AIndex: integer); inline;
+  begin
+    System.Insert(AChars, Dest, AIndex);
+    System.Delete(Dest, AIndex + 2, 1);
+    Inc(AIndex, 2);
+  end;
+
+  procedure AddUnicodeChars(const AChars: string; var Dest: string; var AIndex: integer); inline;
+  begin
+    System.Insert(AChars, Dest, AIndex);
+    System.Delete(Dest, AIndex + 6, 1);
+    Inc(AIndex, 6);
+  end;
+
+begin
+  // i
+//  Result := '';
+//  for c in IvString do begin
+//    case c of
+//      // !! double quote (") is handled by TJSONString
+//    //QUOTATION_MARK : Result := Result + ESCAPE + QUOTATION_MARK;
+//      REVERSE_SOLIDUS: Result := Result + ESCAPE + REVERSE_SOLIDUS;
+//      SOLIDUS        : Result := Result + ESCAPE + SOLIDUS;
+//      BACKSPACE      : Result := Result + ESCAPE + 'b';
+//      FORM_FEED      : Result := Result + ESCAPE + 'f';
+//      NEW_LINE       : Result := Result + ESCAPE + 'n';
+//      CARRIAGE_RETURN: Result := Result + ESCAPE + 'r';
+//      HORIZONTAL_TAB : Result := Result + ESCAPE + 't';
+//      else begin
+//        if (integer(c) < 32) or (integer(c) > 126) then
+//          Result := Result + ESCAPE + 'u' + IntToHex(integer(c), 4)
+//        else
+//          Result := Result + c;
+//      end;
+//    end;
+//  end;
+
+  // ii
+  Result := IvString;
+  ix := 1;
+  for i := 1 to System.Length(IvString) do begin
+    c :=  IvString[i];
+    case c of
+      '/', '\', '"':
+      begin
+        System.Insert('\', Result, ix);
+        Inc(ix, 2);
+      end;
+      #8:  // backspace
+      begin
+        AddChars('\b', Result, ix);
+      end;
+      #9: // tab
+      begin
+        AddChars('\t', Result, ix);
+      end;
+      #10: // newline
+      begin
+        AddChars('\n', Result, ix);
+      end;
+      #12: // formfeed
+      begin
+        AddChars('\f', Result, ix);
+      end;
+      #13: // carriagereturn
+      begin
+        AddChars('\r', Result, ix);
+      end;
+      #0 .. #7, #11, #14 .. #31:
+      begin
+        AddUnicodeChars('\u' + IntToHex(Word(c), 4), Result, ix);
+      end else begin
+        if Word(c) > 127 then begin
+          AddUnicodeChars('\u' + IntToHex(Word(c), 4), Result, ix);
+        end else begin
+          Inc(ix);
+        end;
+      end;
+    end;
+  end;
+end;
+
+function TSobRec.StrUnescape(const IvString: AnsiString): string;
+//var
+//  j: TJSONValue;
+begin
+//  j := TJSONObject.ParseJSONValue(TEncoding.UTF8.GetBytes(IvString), 0);
+//  Result := j.ToString;
+end;
+
+function TSobRec.SuperTypeToFieldSize( IvSuperType: superobject.TSuperType): integer;
+begin
+  Result := 0;
+  if (IvSuperType = stString) then
+    Result := 255;
+end;
+
+function TSobRec.SuperTypeToFieldType( IvSuperType: superobject.TSuperType): TFieldType;
+begin
+  case IvSuperType of
+    stBoolean:  Result := ftBoolean;
+    stDouble:   Result := ftFloat;
+    stCurrency: Result := ftCurrency;
+    stInt:      Result := ftinteger;
+    stObject:   Result := ftDataSet;
+    stArray:    Result := ftDataSet;
+    stString:   Result := ftString;
+  else          Result := ftUnknown;
+  end;
+end;
+
+procedure TSobRec.ToFileUTF8(const aFileName: string; o: superobject.ISuperObject);
+var
+  output: TFileStream;
+  input: TStringStream;
+begin
+//  input := TStringStream.Create(UTF16ToUTF8(o.AsJSon(true)));
+  try
+     output := TFileStream.Create(aFileName, fmOpenWrite or fmCreate, fmShareDenyWrite);
+     try
+       output.CopyFrom(input, input.Size);
+     finally
+       FreeAndNil(output);
+     end;
+  finally
+    FreeAndNil(input);
+  end;
+end;
+{$ENDREGION}
+
+{$REGION 'TSopRec'}
+function TSopRec.ConnectionAgentSet(var IvFbk: string; var IvSoapConnection: TSoapConnection): boolean;
+begin
+  IvSoapConnection.Agent := byn.Info;
+  IvFbk := 'Soap connection agent set to: ' + IvSoapConnection.Agent;
+  Result := true;
+end;
+
+function TSopRec.ConnectionUrlSet(var IvFbk: string; var IvSoapConnection: TSoapConnection; IvObj, IvService: string): boolean;
+var
+  u: string;
+begin
+  Result := DmUrl(IvFbk, u, IvObj, IvService);
+  if not Result then
+    Exit;
+  IvSoapConnection.URL := u; // http://localhost/WksXxxSoapProject.dll/soap/IXxxSoapMainDataModule or /IWSDLPublish
+end;
+
+function TSopRec.DmUrl(var IvFbk, IvUrl: string; IvObj, IvService: string): boolean;
+var
+  u: string;
+begin
+  if IvObj = '' then
+    u := SoapUrl(IvObj) + SOAP_WSDL_PUBLISH_URL
+  else
+    u := SoapUrl(IvObj) + Format(sop.SOAP_DM_URL, [IvObj, IvService]);
+  Result := url.Exists(u, sys.URL_EXIST_CHECK);
+  if not Result then begin
+    IvUrl := '';
+    IvFbk := Format(sop.SOAP_SERVER_CONN_URL_FOUND_NO_RS, [sys.Www]);
+  end else begin
+    IvUrl := u;
+    IvFbk := Format(sop.SOAP_SERVER_CONN_URL_FOUND_OK_RS, [sys.Www]);
+  end;
+end;
+
+function TSopRec.SoapUrl(IvObj: string): string;
+var
+  o, u: string;
+begin
+  // url
+  u := srv.Url;
+
+  // object
+  o := IvObj;
+  if IvObj = '' then
+    o := byn.Obj;
+
+  // url
+  Result := u + Format(sop.SOAP_DLL_URL, [o])
+end;
+
+function TSopRec.SoapRioUrl(IvObj, IvService: string; var IvUrl, IvFbk: string): boolean;
+var
+  u: string;
+begin
+  u := sop.SoapUrl(IvObj) + Format(sop.SOAP_RIO_URL, [IvObj, IvService]);
+  Result := url.Exists(u, sys.URL_EXIST_CHECK);
+  if not Result then begin
+    IvUrl := '';
+    IvFbk := Format(sop.SOAP_SERVER_RIO_URL_FOUND_NO_RS, [sys.Www]);
+  end else begin
+    IvUrl := u;
+    IvFbk := Format(sop.SOAP_SERVER_RIO_URL_FOUND_OK_RS, [sys.Www]);
+  end;
+end;
+
+function TSopRec.SoapRioWsdl(IvObj, IvService: string; var IvWsdl, IvFbk: string): boolean;
+var
+  u: string;
+begin
+  u := sop.SoapUrl(IvObj) + Format(sop.SOAP_WSDL_URL, [IvObj, IvService]);
+  Result := url.Exists(u, sys.URL_EXIST_CHECK);
+  if not Result then begin
+    IvWsdl := '';
+    IvFbk := Format(sop.SOAP_SERVER_RIO_URL_FOUND_NO_RS, [u]);
+  end else begin
+    IvWsdl := u;
+    IvFbk := Format(sop.SOAP_SERVER_RIO_URL_FOUND_OK_RS, [u]);
   end;
 end;
 {$ENDREGION}
@@ -8140,7 +14599,7 @@ end;
 function TSqlRec.Validate(IvSql: string; var IvFbk: string): boolean;
 begin
 //IvFbk := 'Sql script is not valid';
-  IvFbk := 'Sql script is valid (' + NOT_IMPLEMENTED + ')';
+  IvFbk := 'Sql script is valid (' + NOT_IMPLEMENTED_STR + ')';
   Result := true;
 end;
 
@@ -8262,89 +14721,6 @@ begin
   IvStream.Position := 0;
 //IvStream.Seek(0, soFromBeginning);
   IvStream.Read(p^, IvStream.Size);
-end;
-{$ENDREGION}
-
-{$REGION 'TSopRec'}
-function TSopRec.ConnectionAgentSet(var IvFbk: string; var IvSoapConnection: TSoapConnection): boolean;
-begin
-  IvSoapConnection.Agent := byn.Info;
-  IvFbk := 'Soap connection agent set to: ' + IvSoapConnection.Agent;
-  Result := true;
-end;
-
-function TSopRec.ConnectionUrlSet(var IvFbk: string; var IvSoapConnection: TSoapConnection; IvObj, IvService: string): boolean;
-var
-  u: string;
-begin
-  Result := DmUrl(IvFbk, u, IvObj, IvService);
-  if not Result then
-    Exit;
-  IvSoapConnection.URL := u; // http://localhost/WksXxxSoapProject.dll/soap/IXxxSoapMainDataModule or /IWSDLPublish
-end;
-
-function TSopRec.DmUrl(var IvFbk, IvUrl: string; IvObj, IvService: string): boolean;
-var
-  u: string;
-begin
-  if IvObj = '' then
-    u := SoapUrl(IvObj) + SOAP_WSDL_PUBLISH_URL
-  else
-    u := SoapUrl(IvObj) + Format(sop.SOAP_DM_URL, [IvObj, IvService]);
-  Result := url.Exists(u, sys.URL_EXIST_CHECK);
-  if not Result then begin
-    IvUrl := '';
-    IvFbk := Format(sop.SOAP_SERVER_CONN_URL_FOUND_NO_RS, [sys.Www]);
-  end else begin
-    IvUrl := u;
-    IvFbk := Format(sop.SOAP_SERVER_CONN_URL_FOUND_OK_RS, [sys.Www]);
-  end;
-end;
-
-function TSopRec.SoapUrl(IvObj: string): string;
-var
-  o, u: string;
-begin
-  // url
-  u := srv.Url;
-
-  // object
-  o := IvObj;
-  if IvObj = '' then
-    o := byn.Obj;
-
-  // url
-  Result := u + Format(sop.SOAP_DLL_URL, [o])
-end;
-
-function TSopRec.SoapRioUrl(IvObj, IvService: string; var IvUrl, IvFbk: string): boolean;
-var
-  u: string;
-begin
-  u := sop.SoapUrl(IvObj) + Format(sop.SOAP_RIO_URL, [IvObj, IvService]);
-  Result := url.Exists(u, sys.URL_EXIST_CHECK);
-  if not Result then begin
-    IvUrl := '';
-    IvFbk := Format(sop.SOAP_SERVER_RIO_URL_FOUND_NO_RS, [sys.Www]);
-  end else begin
-    IvUrl := u;
-    IvFbk := Format(sop.SOAP_SERVER_RIO_URL_FOUND_OK_RS, [sys.Www]);
-  end;
-end;
-
-function TSopRec.SoapRioWsdl(IvObj, IvService: string; var IvWsdl, IvFbk: string): boolean;
-var
-  u: string;
-begin
-  u := sop.SoapUrl(IvObj) + Format(sop.SOAP_WSDL_URL, [IvObj, IvService]);
-  Result := url.Exists(u, sys.URL_EXIST_CHECK);
-  if not Result then begin
-    IvWsdl := '';
-    IvFbk := Format(sop.SOAP_SERVER_RIO_URL_FOUND_NO_RS, [u]);
-  end else begin
-    IvWsdl := u;
-    IvFbk := Format(sop.SOAP_SERVER_RIO_URL_FOUND_OK_RS, [u]);
-  end;
 end;
 {$ENDREGION}
 
@@ -8545,6 +14921,25 @@ begin
   end;
 end;
 
+function TStrRec.CamelToVec(IvString: string): TStringVector;
+var
+  s: string;
+begin
+  s := Expande(IvString);
+  Result := System.StrUtils.SplitString(s, ' ');
+end;
+
+function TStrRec.CharShift(const IvString: string; IvShift: integer): string;
+var
+  s: string;
+  i: integer;
+begin
+  s := IvString;
+  for i := 1 to Length(s) do
+    s[i] := Chr(Ord(s[i]) + IvShift);
+  Result := s;
+end;
+
 function TStrRec.Coalesce(IvStringVector: TStringVector): string;
 var
   i: Integer;
@@ -8663,6 +15058,43 @@ begin
     Result := Pos(UpperCase(IvSubString), UpperCase(IvString)) > 0; // caseINsensitive
 end;
 
+function TStrRec.HasRex(IvString, IvRex: string; IvOpt: TRegExOptions): boolean;
+begin
+  Result := rex.Has(IvString, IvRex, IvOpt);
+end;
+
+function TStrRec.HasWildcard(IvString, IvStrWithWildcard: string): boolean;
+var
+  i, j, l, p: word;
+begin
+  i := 1; j := 1;
+  while (i <= length(IvStrWithWildcard)) do begin
+    if IvStrWithWildcard[i] = '*' then begin
+      if i = Length(IvStrWithWildcard) then begin
+        Result := true;
+        Exit
+      end else begin //we need to synchronize
+        l := i + 1;
+        while (l < Length(IvStrWithWildcard)) and (IvStrWithWildcard[l+1] <> '*') do
+          inc (l);
+          p := pos(copy(IvStrWithWildcard, i+1, l-i), IvString);
+        if p > 0 then begin
+          j := p-1;
+        end else begin
+          Result := false;
+          Exit;
+        end;
+      end;
+    end else if (IvStrWithWildcard[i] <> '?') and ((Length(IvString) < i) or (IvStrWithWildcard[i] <> IvString[j])) then begin
+      Result := false;
+      Exit
+    end;
+    inc (i);
+    inc (j);
+  end;
+  Result := (j > Length(IvString));
+end;
+
 function TStrRec.HeadAdd(IvString, IvHead: string): string;
 begin
   Result := IvString;
@@ -8714,6 +15146,21 @@ begin
     Result := IsInteger(IvString) or IsFloat(IvString);
 end;
 
+function TStrRec.IsPath(const IvString: string): boolean;
+begin
+  Result := IvString.Contains('/') or IvString.Contains('\') or IvString.Contains('.');
+end;
+
+function TStrRec.Left(IvString: string; IvCount: integer): string;
+begin
+  Result := Copy(IvString, 1, IvCount);
+end;
+
+function TStrRec.LeftCut(s: string; i: integer): string;
+begin
+  Result := copy(s, i + 1, Length(s) - i);
+end;
+
 function TStrRec.LeftOf(IvTag, IvString: string; IvTagInclude: boolean): string;
 begin
   // i
@@ -8723,6 +15170,32 @@ begin
   Result := Copy(IvString, 1, Pos(IvTag, IvString)-1);
   if IvTagInclude then
     Result := Result + IvTag;
+end;
+
+function TStrRec.Match(IvSubString, IvString: string; IvCharMinToMatch: integer): boolean;
+var
+  l, i: integer;
+begin
+  // check
+  Result := IvSubString <> '';
+  if not Result then
+    Exit;
+  Result := Length(IvSubString) <= Length(IvString);
+  if not Result then
+    Exit;
+
+  // mincharstomatch
+  if IvCharMinToMatch < 1 then
+    l := Length(IvSubString)
+  else
+    l := IvCharMinToMatch;
+
+  // check l chars
+  for i := 1 to l do begin
+    Result := UpperCase(IvString[i]) = UpperCase(IvSubString[i]);
+    if not Result then
+      Exit; // no match
+  end;
 end;
 
 function TStrRec.OneLine(IvString: string): string;
@@ -8803,9 +15276,50 @@ begin
     Result := IvStart - 1 + Result;
 end;
 
+function TStrRec.Proper(IvString: string): string;
+begin
+  Result := UpperCase(Copy(IvString, 1, 1)) + LowerCase(Copy(IvString, 2, Length(IvString)-1));
+end;
+
+function TStrRec.Quote(const IvString: string): string;
+begin
+  Result := QuotedStr(IvString);
+end;
+
+function TStrRec.QuoteDbl(const IvString: string): string;
+begin
+  Result := AnsiQuotedStr(IvString, '"');
+end;
+
+function TStrRec.Remove(IvString, IvOut: string): string;
+begin
+  Result := Replace(IvString, IvOut, '');
+end;
+
 function TStrRec.Replace(IvString, IvOut, IvIn: string): string;
 begin
   Result := StringReplace(IvString, IvOut, IvIn, [rfReplaceAll, rfIgnoreCase]);
+end;
+
+function TStrRec.Reverse(IvString: string): string;
+var
+  i: integer;
+begin
+  Result := '';
+  for i := 1 to Length(IvString) do
+    Result := IvString[i] + Result;
+end;
+
+function TStrRec.Right(IvString: string; IvCount: integer): string;
+begin
+  if IvCount > Length(IvString) then
+    IvCount := Length(IvString);
+  Result := copy(IvString, Length(IvString) - IvCount + 1, IvCount);
+end;
+
+function TStrRec.RightCut(s: string; i: integer): string;
+begin
+  Result := copy(s, i, Length(s) - i);
 end;
 
 function TStrRec.RightOf(IvTag, IvString: string; IvTagInclude, IvLast: boolean): string;
@@ -8840,6 +15354,34 @@ begin
   Result := IvString;
   if IvString.EndsWith(IvTail) then
     Result := IvString.Remove(Length(IvString) - Length(IvTail));
+end;
+
+function TStrRec.ToBool(IvString: string; IvDefault: boolean): boolean;
+var
+  s: string;
+begin
+  s := UpperCase(Trim(IvString));
+
+  if s = '' then begin
+    Result := IvDefault;
+    Exit;
+  end;
+
+       if s = 'KO'    then Result := false
+  else if s = 'OFF'   then Result := false
+  else if s = 'NO'    then Result := false
+  else if s = 'FALSE' then Result := false
+
+  else if s ='-1'     then Result := false
+  else if s = '0'     then Result := false
+  else if s = '1'     then Result := true
+
+  else if s = 'TRUE'  then Result := true
+  else if s = 'YES'   then Result := true
+  else if s = 'ON'    then Result := true
+  else if s = 'OK'    then Result := true
+  else                     Result := false
+  ;
 end;
 
 function TStrRec.W(IvE: Exception): string;
@@ -8903,8 +15445,13 @@ var
   o: boolean;
   k: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  o := (rio.HttpRio as ISystemSoapMainService).SystemSoapCopyright(Result, k);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TSysRec.RioInfo: string;
@@ -8912,8 +15459,13 @@ var
   o: boolean;
   k: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  o := (rio.HttpRio as ISystemSoapMainService).SystemSoapInfo(k);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TSysRec.RioLicense: string;
@@ -8921,13 +15473,18 @@ var
   o: boolean;
   k: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  o := (rio.HttpRio as ISystemSoapMainService).SystemSoapLicense(Result, k);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 procedure TSysRec.RioLog(IvHost, IvAgent, IvTag, IvValue: string; IvLifeMs: integer);
 begin
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TSysRec.RioOutline: string;
@@ -8935,8 +15492,13 @@ var
   o: boolean;
   k: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  o := (rio.HttpRio as ISystemSoapMainService).SystemSoapOutline(Result, k);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TSysRec.RioPrivacy: string;
@@ -8944,8 +15506,13 @@ var
   o: boolean;
   k: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  o := (rio.HttpRio as ISystemSoapMainService).SystemSoapPrivacy(Result, k);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TSysRec.RioRequestLog(IvOrganization, IvUsername, IvPassword, IvSession: string): string;
@@ -8953,8 +15520,13 @@ var
   o: boolean;
   k: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  o := (rio.HttpRio as ISystemSoapMainService).SystemSoapRequestLog(IvOrganization, IvUsername, IvPassword, IvSession, Result, k);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TSysRec.RioSessionLog(IvOrganization, IvUsername, IvPassword, IvSession: string): string;
@@ -8962,8 +15534,13 @@ var
   o: boolean;
   k: string;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  o := (rio.HttpRio as ISystemSoapMainService).SystemSoapSessionLog(IvOrganization, IvUsername, IvPassword, byn.Nick, Result, k);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TSysRec.Slogan: string;
@@ -8993,7 +15570,7 @@ end;
 function TUagRec.DbaExists(var IvFbk: string): boolean;
 begin
   Result := false;
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TUagRec.DbaInsert(var IvFbk: string): boolean;
@@ -9337,7 +15914,7 @@ end;
 
 function TUsrRec.DbaSelect(const IvUsername: string; var IvFbk: string): boolean;
 begin
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TUsrRec.Info: string;
@@ -9355,20 +15932,35 @@ end;
 
 function TUsrRec.RioExists(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapUserExists(IvOrganization, IvUsername, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TUsrRec.RioIsActive(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
+  try
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapUserIsActive(IvOrganization, IvUsername, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TUsrRec.RioIsAuthenticated(IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean;
 begin
+  Screen.Cursor := crHourGlass;
   // TEMPORARYCOMMENT
 //  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapUserIsAuthenticated(IvOrganization, IvUsername, IvPassword, IvFbk);
+  try
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function TUsrRec.UrlAlpha(IvUsername: string): string;
@@ -10303,7 +16895,7 @@ begin
 //    if Result then
 //      Exit;
 //  end;
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TWreRec.PathInfoQuery: string;
@@ -10350,7 +16942,7 @@ end;
 
 procedure TWrsRec.CookieDelete(IvResponse: TWebResponse; IvCookie: string);
 begin
-  raise Exception.Create(NOT_IMPLEMENTED);
+  raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
 function TWrsRec.CustomHeaderAdd(IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; var IvFbk: string): boolean;
@@ -10374,6 +16966,497 @@ begin
   Result := true;
   IvFbk := 'OK';
 end;
+{$ENDREGION}
+
+{$REGION 'TVstRec'}
+procedure TVstRec.GetImageIndex(IvVst: TBaseVirtualTree; Node: PVirtualNode; Kind: TVTImageKind; Column: TColumnIndex; var Ghosted: Boolean; var ImageIndex: TImageIndex);
+var
+  r: PNodeItem; // q: TDTNodeItem;
+  n{, l}, i, p, z, k, s, o, w: string; // name, level, id, pid, ord, kind, state, orga, owner
+begin
+  // def
+  ImageIndex := -1;
+
+  {$REGION 'Exit'}
+  if not (Kind in [ikNormal, ikSelected]) then // only selected or not
+    Exit;
+  if Column > 0 then // -1 = nocolumns, 0 = 1stcol, 1..= 2nd..col
+    Exit;
+  {$ENDREGION}
+
+  {$REGION 'Info DUPLICATED'}
+  try
+    // node
+    r := IvVst.GetNodeData(Node);
+    if not Assigned(r) then
+      Exit;
+
+    // level
+  //l := IvVst.GetNodeLevel(Node);
+
+    // name
+    n := r.Caption;
+  //n := r.Param[0];       // only available if r.Param has been set during AgentDTClientTreeDBTreeCreateNode
+  //n := r.FieldValues[1]; // only available if header columns values are present
+
+    {0-id          }  i := r.Key; //i := r.Param[0];
+
+    if VarIsClear(r.Param) then
+      Exit;
+
+    {1-pid         }  p := r.Param[1];
+    {2-order       }  z := r.Param[2];
+    {3-kind        }  k := r.Param[3];
+    {4-state       }  s := r.Param[4];
+    {5-organization}  o := r.Param[5];
+    {6-owner       }  w := r.Param[6]; // r.FieldValues[6];
+
+    // kind
+  //if not VarIsClear(r.Param)       and (VarArrayDimCount(r.Param)       = 1) and (VarArrayHighBound(r.Param, 1) > 1) then k := VarToStrDef(r.Param[2]      , '') else k := '';
+  //if not VarIsClear(r.FieldValues) and (VarArrayDimCount(r.FieldValues) = 1) and (VarArrayHighBound(r.Param, 1) > 0) then k := VarToStrDef(r.FieldValues[1], '') else k := '';
+
+    // state
+  //if not VarIsClear(r.Param)       and (VarArrayDimCount(r.Param)       = 1) and (VarArrayHighBound(r.Param, 1) > 2) then s := VarToStrDef(r.Param[3]      , '') else s := '';
+  //if not VarIsClear(r.FieldValues) and (VarArrayDimCount(r.FieldValues) = 1) and (VarArrayHighBound(r.Param, 1) > 1) then s := VarToStrDef(r.FieldValues[2], '') else s := '';
+  except
+    ;
+  end;
+  {$ENDREGION}
+
+  {$REGION 'ById'}
+  {$ENDREGION}
+
+  {$REGION 'ByName'}
+  // 0-level (root)
+       if n            = 'Root'                 then ImageIndex :=  1
+  // 1-level
+  else if SameText(n   , 'Zzz'                ) then ImageIndex :=  3
+  else if SameText(   n, 'System'             ) then ImageIndex :=  2
+  else if nam.IsNumOf(n, 'Test'               ) then ImageIndex := 20
+  else if SameText(   n, 'Template'           ) then ImageIndex := 12
+  else if SameText(   n, 'Organization'       ) then ImageIndex :=  6
+  else if n =            'People'               then ImageIndex := 57
+  else if nam.IsNumOf(n, 'Public'             ) then ImageIndex := 70
+  else if nam.IsNumOf(n, 'Help'               ) then ImageIndex := 19
+  else if nam.IsNumOf(n, 'New'                ) then ImageIndex := 25
+  else if SameText(   n, '!!!'                ) then ImageIndex :=  4
+  // objects
+  else if nam.IsNumOf(n, 'Folder'             ) then ImageIndex :=  8
+  else if n =            'Unknown'              then ImageIndex := 14
+  else if nam.IsNumOf(n, 'Link'               ) then ImageIndex := 11
+  else if nam.IsNumOf(n, 'Library'            ) then ImageIndex := 10
+  // objects
+  else if n =            'Localhost'            then ImageIndex := 14
+  else if n =            'Person'               then ImageIndex := 16
+  else if n =            'Member'               then ImageIndex := 66
+  else if n =            'Sidemenu'             then ImageIndex := 34
+  else if n =            'Image'                then ImageIndex := 75
+  else if n =            'Picture'              then ImageIndex := 76
+  // notevoli
+  else if n            = 'Wks'                  then ImageIndex := 15
+  else if nam.IsNumOf(n, 'Sample'             ) then ImageIndex := 20
+  else if nam.IsNumOf(n, 'Reserved'           ) then ImageIndex :=  5
+  else if SameText(n   , '???'                ) then ImageIndex :=  4
+  else if Length(n) = 1                         then ImageIndex :=  9 // A..Z
+  // structure
+  else if SameText(n   , 'Department'         ) then ImageIndex := 21
+  else if SameText(n   , 'Area'               ) then ImageIndex := 38
+  else if SameText(n   , 'Team'               ) then ImageIndex := 39
+  // organization=school
+  else if SameText(n   , 'School')              then ImageIndex := 71
+  // area
+//else if SameText(n   , 'Cfa'                ) or SameText(n, 'Cfa') or SameText(n, 'Cf') then ImageIndex := 24
+//else if SameText(n   , 'Cmp'                ) or SameText(n, 'Cmp') or SameText(n, 'Cm') then ImageIndex := 25
+//else if SameText(n   , 'Cvd'                ) or SameText(n, 'Cvd') or SameText(n, 'Cv') then ImageIndex := 26
+//else if SameText(n   , 'Diffusion'          ) or SameText(n, 'Dif') or SameText(n, 'Df') then ImageIndex := 27
+//else if SameText(n   , 'DryEtch'            ) or SameText(n, 'Dry') or SameText(n, 'De') then ImageIndex := 28
+//else if SameText(n   , 'FailureAnalysis'    ) or SameText(n, 'Fan') or SameText(n, 'Fa') then ImageIndex := 29
+//else if SameText(n   , 'Implant'            ) or SameText(n, 'Imp') or SameText(n, 'Im') then ImageIndex := 30
+//else if SameText(n   , 'Metrology'          ) or SameText(n, 'Met') or SameText(n, 'Mt') then ImageIndex := 31
+//else if SameText(n   , 'Photo'              ) or SameText(n, 'Pho') or SameText(n, 'Ph') then ImageIndex := 32
+//else if SameText(n   , 'Probe'              ) or SameText(n, 'Prb') or SameText(n, 'Pr') then ImageIndex := 33
+//else if SameText(n   , 'Pvd'                ) or SameText(n, 'Pvd') or SameText(n, 'Pv') then ImageIndex := 34
+//else if SameText(n   , 'Rda'                ) or SameText(n, 'Rda') or SameText(n, 'Rd') then ImageIndex := 35
+//else if SameText(n   , 'Wet'                ) or SameText(n, 'Wet') or SameText(n, 'Wp') then ImageIndex := 36
+  // task
+//else if SameText(n, tsk.TaskKindOrganization) then ImageIndex :=  1
+//else if SameText(n, tsk.TaskKindPortfolio   ) then ImageIndex :=  2
+//else if SameText(n, tsk.TaskKindProgram     ) then ImageIndex :=  3
+//else if SameText(n, tsk.TaskKindPackage     ) then ImageIndex :=  4
+//else if SameText(n, tsk.TaskKindProject     ) then ImageIndex :=  5
+//else if SameText(n, tsk.TaskKindModule      ) then ImageIndex :=  6
+//else if SameText(n, tsk.TaskKindGroup       ) then ImageIndex :=  7
+//else if SameText(n, tsk.TaskKindTask        ) then ImageIndex :=  8
+  {$ENDREGION}
+
+  {$REGION 'ByKind'}
+  // system
+  else if k         =    'Root'                 then ImageIndex :=   1
+  else if k         =    'Folder'               then ImageIndex :=   8
+  else if k         =    'Library'              then ImageIndex :=  10
+  else if k         =    'Link'                 then ImageIndex :=  11
+  else if k         =    'Param'                then ImageIndex :=  99
+  else if k         =    'Switch'               then ImageIndex :=  94
+  // object
+  else if k         =    'User'                 then ImageIndex :=  90
+  else if k         =    'Person'               then ImageIndex := 100
+  else if k         =    'Men'                  then ImageIndex :=  16
+  else if k         =    'Woman'                then ImageIndex :=  17
+  else if k         =    'Member'               then ImageIndex :=  67
+  else if k         =    'Account'              then ImageIndex :=  90
+  // organization
+  else if k         =    'Organization'         then ImageIndex :=   6
+  else if k         =    'Department'           then ImageIndex :=  21
+  else if k         =    'Area'                 then ImageIndex :=  38
+  else if k         =    'Team'                 then ImageIndex :=  39
+  // organization=school
+  else if k         =    'School'               then ImageIndex :=  72
+  // document
+  else if k         =    'Page'                 then ImageIndex :=  67
+  else if k         =    'Home'                 then ImageIndex :=  7
+  else if k         =    'MenuLeft'             then ImageIndex :=  91
+  else if k         =    'MenuRight'            then ImageIndex :=  92
+  else if k         =    'Document'             then ImageIndex :=  66
+  else if k         =    'Presentation'         then ImageIndex :=  68
+  else if k         =    'Slide'                then ImageIndex :=  69
+  else if k         =    'Image'                then ImageIndex :=  75
+  else if k         =    'Picture'              then ImageIndex :=  76
+  else if k         =    'Report'               then ImageIndex :=  98
+  // spc
+  else if k         =    'Run'                  then ImageIndex :=  38
+  else if k         =    'ZScore'               then ImageIndex :=  39
+  // code
+  else if k         = cod.BAT_KIND              then ImageIndex :=  36 // *** WARNING, POTENTIALLY INCOMPLETE ***
+  else if k         = cod.CSS_KIND              then ImageIndex :=  49
+  else if k         = cod.CSV_KIND              then ImageIndex :=  43
+  else if k         = cod.DWS_KIND              then ImageIndex :=  46
+  else if k         = cod.ETL_KIND              then ImageIndex :=  45
+  else if k         = cod.ETL_SQL_KIND          then ImageIndex :=  14 // TODO
+  else if k         = cod.ETL_MONGO_KIND        then ImageIndex :=  14 // TODO
+  else if k         = cod.HTML_KIND             then ImageIndex :=  48
+  else if k         = cod.ISS_KIND              then ImageIndex :=  93
+  else if k         = cod.JAVA_KIND             then ImageIndex :=  14 // TODO
+  else if k         = cod.JS_KIND               then ImageIndex :=  50
+  else if k         = cod.JSON_KIND             then ImageIndex :=  51
+  else if k         = cod.PAS_KIND              then ImageIndex :=  55
+  else if k         = cod.PY_KIND               then ImageIndex :=  52
+  else if k         = cod.R_KIND                then ImageIndex :=  54
+  else if k         = cod.SQL_KIND              then ImageIndex :=  44
+  else if k         = cod.TXT_KIND              then ImageIndex :=  42
+  else if k         = cod.INI_KIND              then ImageIndex :=  97
+  {$ENDREGION}
+
+  {$REGION 'ByState'}
+  // managed via text color, see onpainttext
+  {$ENDREGION}
+
+  {$REGION 'else'}
+  else                                               ImageIndex :=  0; // -1
+  {$ENDREGION}
+
+end;
+
+procedure TVstRec.GetNodeInfo(IvVst: TBaseVirtualTree; Node: PVirtualNode; var IvPath, IvCaption: string; var IvKey, IvLevel, IvChildCount: integer);
+var
+  d: PNodeItem;
+begin
+  d            := IvVst.GetNodeData(Node);
+  IvPath       := GetNodePath(IvVst, Node, '/');
+  IvCaption    := d.Caption;
+  IvKey        := d.Key.ToInteger;
+  IvLevel      := IvVst.GetNodeLevel(Node);
+  IvChildCount := Node.ChildCount;
+end;
+
+function TVstRec.GetNodePath(IvVst: TBaseVirtualTree; IvNode: PVirtualNode; IvDelimiter: char; IvUseLevels: boolean): string;
+const
+  COLUMN = 0;
+var
+  l: cardinal;
+begin
+  if not Assigned(IvNode) then begin
+    Result := '';
+    Exit;
+  end;
+
+  if not IvUseLevels then begin
+    Result := (IvVst as TVirtualStringTree).Path(IvNode, COLUMN, IvDelimiter);
+    Exit;
+  end;
+
+  Result := '';
+  while IvNode <> IvVst.RootNode do begin
+    l := IvVst.GetNodeLevel(IvNode);
+    Result := IntToStr(l) + IvDelimiter + Result;
+    IvNode := IvNode.Parent;
+  end;
+  Delete(Result, Length(Result), 1);
+end;
+
+procedure TVstRec.NodeParamSet(IvVst: TVirtualStringTree; IvNode: PVirtualNode; IvDs: TDataSet);
+var
+  r: PNodeItem;
+  i, p, z, k, s, o, w: string; // id, pid, ord, kind, state, orga, owner
+begin
+  // parent state kind
+  if Assigned(IvDs.FindField('FldId'          )) then i := IvDs.FieldByName('FldId'          ).AsString else i := '0';
+  if Assigned(IvDs.FindField('FldPId'         )) then p := IvDs.FieldByName('FldPId'         ).AsString else p := '0';
+  if Assigned(IvDs.FindField('FldOrder'       )) then z := IvDs.FieldByName('FldOrder'       ).AsString else z := '0';
+  if Assigned(IvDs.FindField('FldKind'        )) then k := IvDs.FieldByName('FldKind'        ).AsString else k := sta.Unknown.Key;
+  if Assigned(IvDs.FindField('FldState'       )) then s := IvDs.FieldByName('FldState'       ).AsString else s := sta.Unknown.Key;
+  if Assigned(IvDs.FindField('FldOrganization')) then o := IvDs.FieldByName('FldOrganization').AsString else o := sta.Unknown.Key;
+  if Assigned(IvDs.FindField('FldOwner'       )) then w := IvDs.FieldByName('FldOwner'       ).AsString else w := sta.Unknown.Key;
+
+  // set
+  r := IvVst.GetNodeData(IvNode);
+  r.Param := VarArrayOf([i, p, z, k, s, o, w]);
+
+  // in OnFormCreate might appear DTClientTree.NodeDataSize := SizeOf(PNodeItem)
+  //IvVst.NodeDataSize := SizeOf(r);
+end;
+
+procedure TVstRec.OnCompareNodes(IvVst: TBaseVirtualTree; Node1, Node2: PVirtualNode; Column: TColumnIndex; var Result: integer);
+var
+  a, b: PNodeItem;
+  r, s: string;  // orderstr
+  i, j: integer; // orderint
+begin
+  // a
+  a := IvVst.GetNodeData(Node1);
+  if not Assigned(a) then begin
+    Result := 0;
+    Exit;
+  end;
+
+  // b
+  b := IvVst.GetNodeData(Node2);
+  if not Assigned(b) then begin
+    Result := 0;
+    Exit;
+  end;
+
+  // sort
+  try
+    // bycaption
+    if Column <= 0 then begin
+      r := a.Caption;
+      s := b.Caption;
+      Result := CompareText(r, s);
+
+    // byspecificcolumnorparam
+    end else begin
+      //if VarIsNull(a.FieldValues[Column]) then i := 0 else i := a.FieldValues[Column];
+      //if VarIsNull(b.FieldValues[Column]) then j := 0 else j := b.FieldValues[Column];
+      r := a.FieldValues[Column]; // VarToStr(a.FieldValues[Column])
+      s := b.FieldValues[Column]; // VarToStr(a.FieldValues[Column])
+      if str.IsNumeric(r) and str.IsNumeric(s) then
+        Result := StrToIntDef(r, 0) - StrToIntDef(s, 0)
+      else
+        Result := CompareText(r, s);
+    end;
+  except
+    Result := 0;
+  end;
+end;
+
+procedure TVstRec.OnPaintText(IvVst: TBaseVirtualTree; const TargetCanvas: TCanvas; Node: PVirtualNode; Column: TColumnIndex; TextType: TVSTTextType);
+var
+  r: PNodeItem; // q: TDTNodeItem;
+  n{, l}, i, p, z, k, s, o, w: string; // name, level, id, pid, ord, kind, state, orga, owner
+begin
+
+  {$REGION 'Exit'}
+  if Column > 0 then // -1 = nocolumns, 0 = 1stcol, 1..= 2nd..col
+    Exit;
+  {$ENDREGION}
+
+  {$REGION 'Info DUPLICATED'}
+  try
+    // node
+    r := IvVst.GetNodeData(Node);
+    if not Assigned(r) then
+      Exit;
+
+    // level
+  //l := IvVst.GetNodeLevel(Node);
+
+    // name
+    n := r.Caption;
+  //n := r.Param[0];       // only available if r.Param has been set during AgentDTClientTreeDBTreeCreateNode
+  //n := r.FieldValues[1]; // only available if header columns values are present
+
+    {0-id          }  i := r.Key; //i := r.Param[0];
+
+    if VarIsClear(r.Param) then
+      Exit;
+
+    {1-pid         }  p := r.Param[1];
+    {2-order       }  z := r.Param[2];
+    {3-kind        }  k := r.Param[3];
+    {4-state       }  s := r.Param[4];
+    {5-organization}  o := r.Param[5];
+    {6-owner       }  w := r.Param[6]; // r.FieldValues[6];
+
+    // kind
+  //if not VarIsClear(r.Param)       and (VarArrayDimCount(r.Param)       = 1) and (VarArrayHighBound(r.Param, 1) > 1) then k := VarToStrDef(r.Param[2]      , '') else k := '';
+  //if not VarIsClear(r.FieldValues) and (VarArrayDimCount(r.FieldValues) = 1) and (VarArrayHighBound(r.Param, 1) > 0) then k := VarToStrDef(r.FieldValues[1], '') else k := '';
+
+    // state
+  //if not VarIsClear(r.Param)       and (VarArrayDimCount(r.Param)       = 1) and (VarArrayHighBound(r.Param, 1) > 2) then s := VarToStrDef(r.Param[3]      , '') else s := '';
+  //if not VarIsClear(r.FieldValues) and (VarArrayDimCount(r.FieldValues) = 1) and (VarArrayHighBound(r.Param, 1) > 1) then s := VarToStrDef(r.FieldValues[2], '') else s := '';
+  except
+    ;
+  end;
+
+  // exit
+  if Str.Has('Root,Folder,Link', n)  then
+    Exit;
+  {$ENDREGION}
+
+  {$REGION 'ByState'}
+       if s = sta.Active.Key     then       TargetCanvas.Font.Color := col.BLUE //; TargetCanvas.Brush.Color := clBlue; TargetCanvas.Font.Style := Font.Style + [{fsBold,} fsItalic];
+  else if s = sta.Inactive.Key   then       TargetCanvas.Font.Color := col.GRAY
+//else if s = sta.Archived.Key   then
+//else if s = sta.Developing.Key then
+  else if s = sta.Testing.Key    then begin TargetCanvas.Font.Color := col.ORANGE; TargetCanvas.Font.Style := TargetCanvas.Font.Style + [{fsBold,} fsItalic]; end
+  else if s = sta.Validating.Key then       TargetCanvas.Font.Color := col.ORANGERED
+  else if s = sta.Validated.Key  then       TargetCanvas.Font.Color := col.GREEN
+  else if s = sta.Running.Key    then       TargetCanvas.Font.Color := col.RED
+//else if s = sta.New.Key        then
+//else if s = sta.Waiting.Key    then
+//else if s = sta.Unknown.Key    then
+  ;
+  {$ENDREGION}
+
+end;
+{$ENDREGION}
+
+{$REGION 'TSbuRec'}
+procedure TSbuRec.Add(IvString: string; IvNlPrefix: integer);
+var
+  i: integer;
+begin
+  for i := 1 to IvNlPrefix do
+    Text := Text + sLineBreak;
+  Text := Text + IvString;
+end;
+
+procedure TSbuRec.AiE(IvString, IvDefault: string; IvNlPrefix: integer);
+var
+  s: string;
+begin
+  s := IvString;
+  if iis.Nx(s) then
+    s := IvDefault;
+  Add(s, IvNlPrefix);
+end;
+
+procedure TSbuRec.Aif(IvString: string; IvTest: boolean; IvNlPrefix: integer);
+begin
+  if IvTest then
+    Add(IvString, IvNlPrefix);
+end;
+
+procedure TSbuRec.AiX(IvString: string; IvNlPrefix: integer);
+begin
+  if iis.Ex(IvString) then
+    Add(IvString, IvNlPrefix);
+end;
+
+procedure TSbuRec.Ann(IvString: string);
+begin
+  Text := Text + IvString;
+end;
+
+procedure TSbuRec.ATg(IvString, IvTag: string);
+begin
+  Fmt('<%s>%s</%s>', [IvTag, IvString, IvTag]);
+end;
+
+procedure TSbuRec.AXr(IvString, IvReturn: string; IvNlPrefix: integer);
+begin
+  if iis.Ex(IvString) then
+    Add(IvReturn, IvNlPrefix);
+end;
+
+procedure TSbuRec.Clear;
+begin
+  Text := '';
+end;
+
+procedure TSbuRec.Emp(IvNl: integer);
+var
+  i: integer;
+begin
+  for i := 1 to IvNl do
+    Text := Text + sLineBreak;
+end;
+
+procedure TSbuRec.Fie(IvFormat: string; IvVarRecVector: array of TVarRec; IvTest: string; IvNlPrefix: integer);
+begin
+  if iis.Ex(IvTest) then
+    Fmt(IvFormat, IvVarRecVector, IvNlPrefix);
+end;
+
+procedure TSbuRec.Fif(IvFormat: string; IvVarRecVector: array of TVarRec; IvTest: boolean; IvNlPrefix: integer);
+begin
+  if IvTest then
+    Fmt(IvFormat, IvVarRecVector, IvNlPrefix);
+end;
+
+procedure TSbuRec.FiX(IvFormat, IvIfExist: string; IvNlPrefix: integer);
+begin
+  if IvIfExist <> '' then
+    Add(Format(IvFormat, [IvIfExist]), IvNlPrefix);
+end;
+
+procedure TSbuRec.FiY(IvFormat, IvFormat2, IvIfExist: string; IvNlPrefix: integer);
+begin
+  if IvIfExist = '' then
+    Add(Format(IvFormat, ['']), IvNlPrefix)
+  else
+    Add(Format(IvFormat, [Format(IvFormat2, [IvIfExist])]), IvNlPrefix);
+end;
+
+procedure TSbuRec.Fmt(IvFormat: string; IvVarRecVector: array of TVarRec; IvNlPrefix: integer);
+begin
+  Add(Format(IvFormat, IvVarRecVector), IvNlPrefix);
+end;
+
+procedure TSbuRec.Iif(IvTest: boolean; IvTrueVal, IvFalseVal: string; IvNlPrefix: integer);
+begin
+  if IvTest then
+    Add(IvTrueVal, IvNlPrefix)
+  else
+    Add(IvFalseVal, IvNlPrefix);
+end;
+
+procedure TSbuRec.Rep(IvString, IvOut, IvIn: string; IvNlPrefix: integer);
+begin
+  Add(StringReplace(IvString, IvOut, IvIn, [rfReplaceAll, rfIgnoreCase]), IvNlPrefix);
+end;
+
+procedure TSbuRec.Swi(IvSwitchList, IvSwitch, IvString: string; IvNlPrefix: integer);
+begin
+  if IvSwitchList.Contains(IvSwitch) then
+    Add(IvString, IvNlPrefix);
+end;
+{
+procedure TSbuRec.AdS(IvString: string; NlPrefix: boolean);
+begin
+  Fmt(SUCCESS_STR_FMT, [IvString], NlPrefix);
+end;
+
+procedure TSbuRec.AdW(IvString: string; NlPrefix: boolean);
+begin
+  Fmt(WARNING_STR_FMT, [IvString], NlPrefix);
+end;
+
+procedure TSbuRec.AdE(IvE: Exception; NlPrefix: boolean);
+begin
+  Fmt(EXCEPTION_FORMAT, [IvE.Message], NlPrefix);
+end;
+}
 {$ENDREGION}
 
 initialization
@@ -10492,9 +17575,9 @@ end;
 if byn.IsClient then begin
 
   {$REGION 'ico'}
-  h0 := LoadIcon(HInstance, 'AAA_APPLICATION_BIN_ICON_RC');
-  if h0 > 0 then begin
-    Application.Icon.Handle := h0; // assign main icon at runtime
+  h00 := LoadIcon(HInstance, 'AAA_APPLICATION_BIN_ICON_RC');
+  if h00 > 0 then begin
+    Application.Icon.Handle := h00; // assign main icon at runtime
     OutputDebugString('WKSALLUNIT INIT CLIENT icon assigned');
   end else
     OutputDebugString('WKSALLUNIT INIT CLIENT Unable to assign icon');
@@ -10710,9 +17793,12 @@ end;
 
 function TRioRec.RecordInsertSimple(const IvTable: string; const IvStringVe: TStringVector; var IvFbk: string): boolean;
 begin
-  Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapRecordInsertSimple(IvTable, IvStringVe, IvFbk);
-  if not Result then
-    lg.W(IvFbk);
+  Screen.Cursor := crHourGlass;
+  try
+    Result := (rio.HttpRio as ISystemSoapMainService).SystemSoapRecordInsertSimple(IvTable, IvStringVe, IvFbk);
+  finally
+    Screen.Cursor := crDefault;
+  end;
 end;
 
 function  TSopRec.SoapRioCreateByUrl(var IvHttpRio: THTTPRIO; IvName, IvUrl: string; var IvFbk: string): boolean;

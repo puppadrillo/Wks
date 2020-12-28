@@ -10,7 +10,7 @@ object WebModule1: TWebModule1
       OnAction = WebModule1DefaultHandlerAction
     end>
   BeforeDispatch = WebModuleBeforeDispatch
-  AfterDispatch = WebModule1DefaultHandlerAction
+  AfterDispatch = WebModuleAfterDispatch
   OnException = WebModuleException
   Height = 230
   Width = 415

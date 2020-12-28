@@ -4,7 +4,7 @@ unit WksAllUnit;
 // - remove : PASSWORD
 // - remove : REFERENCES
 // - remove : db0
-// - remove : iarussi giovanni giarussi wks lfmicro engitech
+// - remove : iarussigiovannigiarussiwkslfmicroengitech
 // - remove : rva.Rv( intermedi
 
 interface
@@ -426,6 +426,13 @@ type
     function  Int(IvCaption, IvPrompt: string; IvDefault: integer; var IvInt: integer): boolean;
   end;
 
+  TBolRec = record // boolean
+  public
+    function  ToStr(IvBoolean: boolean; IvLowerCase: boolean = false): string; // WARNING: also in SysyUtils
+    function  FromStr(IvString: string; IvDefault: boolean = false): boolean;  // see StrAsBool
+    function  VectorToBinaryStr(IvBooleanVec: array of boolean): string;       // in = [false, true, false]  out = '010'
+  end;
+
   TBynRec = record // binary exe/dll
 //type
   //TBinaryKind = (bkConsole, bkLibrary, bkService, bkDesktop);
@@ -773,6 +780,11 @@ type
     function  CipherSha2HMac(IvPlain, IvKey: string): string; // HashHMacSha2
   end;
 
+  TCssRec = record // css
+  public
+    function  W3ThemeInit(IvHColor, IvName: string): string;
+  end;
+
   TDatRec = record // datetime
   const
     ZERO        = 0.0;
@@ -1001,6 +1013,18 @@ type
       WebReq : TWebRequest;  // holds request at beginning for internal use
       WebResp: TWebResponse; // holds response at beginning for internal use
     *)
+    {$ENDREGION}
+
+    {$REGION 'Const'}
+    {
+  const
+    HNBSP   = '&nbsp;';   // [ ]
+    HMIDDOT = '&middot;'; // .
+    HLT     = '&lt;';     // <
+    HGT     = '&gt;';     // >
+    HAMP    = '&amp;';    // &
+    HQUOTE  = '&quot;';   // "
+    }
     {$ENDREGION}
 
   public
@@ -2579,6 +2603,8 @@ type
     function  QuoteDbl(const IvString: string): string;                                                         // "abc"
     function  PartN(IvString: string; IvNZeroBased: integer; IvDelimiter: string = '_'): string;                // parser, pick up a id-th substring, 1 based
     function  PosAfter(IvSubString, IvString: string; IvStart: integer = 1): integer;                           //
+    function  PosOfNth{Occurrence}(IvSubString, IvString: string; IvNth: integer): integer;                     // 0|1 based ?
+    function  PosLast{Occurrence}(IvSubString, IvString: string): integer;                                      // 0 based !
     function  Proper(IvString: string): string;                                                                 //
     function  Remove(IvString, IvOut: string): string;                                                          //
     function  Replace(IvString, IvOut, IvIn: string): string;                                                   //
@@ -2951,9 +2977,9 @@ type
     function  StrGet(IvField: string; IvDefault: string; IvCookieAlso: boolean = false): string;
     function  IntGet(IvField: string; IvDefault: integer; IvCookieAlso: boolean = false): integer;
     function  BoolGet(IvField: string; IvDefault: boolean; IvCookieAlso: boolean = false): boolean;
-    function  CookieGet(IvCookie: string; IvDefault: string = ''): string; overload;
-    function  CookieGet(IvWebRequest: TWebRequest; IvCookie: string; IvDefault: integer): integer; overload;
-    function  CookieGet(IvWebRequest: TWebRequest; IvCookie: string; IvDefault: string): string; overload; // get a cookie from client browser
+    function  CookieGet(IvCookie: string; IvDefault: string ): string; overload;
+    function  CookieGet(IvCookie: string; IvDefault: integer): integer; overload;
+    function  CookieGet(IvCookie: string; IvDefault: boolean): boolean; overload; // get a cookie from client browser
     function  FieldExists(IvWebRequest: TWebRequest; IvField: string; var IvFbk: string): boolean;
     function  Field(IvWebRequest: TWebRequest; IvField: string; var IvValue: boolean; IvDefault: boolean; var IvFbk: string; IvFalseIfValueIsEmpty: boolean = true): boolean; overload;
     function  Field(IvWebRequest: TWebRequest; IvField: string; var IvValue: integer; IvDefault: integer; var IvFbk: string; IvFalseIfValueIsEmpty: boolean = true): boolean; overload;
@@ -2967,10 +2993,10 @@ type
   end;
 
   TWrsRec = record // webresponse (pov=server)
+    WebResponse: TWebResponse; // original web response
   public
-    procedure CookieAdd(IvResponse: TWebResponse; IvCookie: string; IvValue: variant; IvExpireInXDay: double = WEB_COOKIE_EXPIRE_IN_DAY); // set a cookie in client browser
-    procedure CookieDelete(IvResponse: TWebResponse; IvCookie: string);
-    function  CustomHeaderAdd(IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; var IvFbk: string): boolean;
+    procedure CookieSet(IvCookie: string; IvValue: variant; IvExpireInXDay: double = WEB_COOKIE_EXPIRE_IN_DAY; IvDomain: string = ''; IvPath: string = '/'); // set a cookie in client browser
+    procedure CookieDelete(IvCookie: string; IvDomain: string = ''; IvPath: string = '/');
   end;
 {$ENDREGION}
 
@@ -2981,6 +3007,7 @@ var
   h00: cardinal;   // handlespare
   all: TAllRec;    // all
   ask: TAskRec;    // ask, win-api-only-dialogs
+  bol: TBolRec;    // boolean
   byn: TBynRec;    // binary
   cns: TCnsRec;    // connectionstring
   cod: TCodRec;    // code
@@ -3092,6 +3119,7 @@ end;
 {$REGION 'TAllRec'}
 function TAllRec.AllRecordDbaInit(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
 begin
+
   // sys (refresh some info since the record is initialized once at beginning using sys.DbaInit(), not for each request)
   sys.HLib := obj.DbaParamGet('System', '113', 'W3');
 
@@ -3139,24 +3167,36 @@ var
   k: string;
   v: variant;
 begin
+  {
+    HERE THE APPLICATION SHOULD KNOW ALL ABOUT THE REQUEST SO IT CAN LOAD ALL THESE BUSINESS RECORDS:
+    - system, params, switches
+    - user, authentication, session
+    - organization, palette, smtp, pop3
+    - member, email, role, level, structure, authorization
+  }
 
   {$REGION 'WebRequestExtended'}
   {Result :=} wre.Init(IvWebRequest);
 //  lg.I('Initialized', 'BEFOREDISPATCH WEBREQUESTEXTENDED'); // TRecHlp<TWreRec>.FieldsToJson(wre)
   {$ENDREGION}
 
-  {$REGION 'F I N A L L Y - ALL-RECORDS-INITIALIZATIONS-FROM-DBA'}
-  Result := all.AllRecordDbaInit(wre.UserOrganization, wre.Username, IvFbk);
-//  lg.I(IvFbk, 'BEFOREDISPATCH ALL-REC-INIT-FROM-DBA');
+  {$REGION 'WebResponseExtended'}
+  {Result :=} wrs.WebResponse := IvWebResponse;
+//  lg.I('Initialized', 'BEFOREDISPATCH WEBREQUESTEXTENDED'); // TRecHlp<TWreRec>.FieldsToJson(wre)
   {$ENDREGION}
 
-  {$REGION 'WebServer'}
+  {$REGION 'Server'}
 //Result := srv.Init(sys.ADMIN_CSV, wre.Host, IntToStr(wre.ServerPort), IvOtpIsActive, IvAuditIsActive, IvFbk);
 //if not Result then begin
 //  lg.W(IvFbk, 'ISAPIWEBMODULE BEFOREDISPATCH WEBSERVER WARNING');
 //  Exit;
 //end;
 //lg.I(TRecHlp<TSrvRec>.FieldsToJson(srv), 'ISAPIWEBMODULE BEFOREDISPATCH WEBSERVER');
+  {$ENDREGION}
+
+  {$REGION 'BusinessRecord'}
+//  Result := all.AllRecordDbaInit(wre.UserOrganization, wre.Username, IvFbk);
+//  lg.I(IvFbk, 'BEFOREDISPATCH ALL-REC-INIT-FROM-DBA');
   {$ENDREGION}
 
   {$REGION 'Otp'}
@@ -3182,14 +3222,38 @@ begin
   *)
   {$ENDREGION}
 
+  {$REGION 'CustomHeaderCors'}
+  IvWebResponse.SetCustomHeader('Access-Control-Allow-Origin', '*');
+  if Trim(IvWebRequest.GetFieldByName('Access-Control-Request-Headers')) <> '' then begin
+    IvWebResponse.SetCustomHeader('Access-Control-Allow-Headers', IvWebRequest.GetFieldByName('Access-Control-Request-Headers'));
+  //Handled := true; see: https://stackoverflow.com/questions/38786004/cors-issue-on-a-delphis-datasnap-isapi-module
+  end;
+  {$ENDREGION}
+
+  {$REGION 'CustomHeaderZzz'}
+  (*
+  IvWebResponse.ContentType := 'text/html';                                          // simulate text/hatml content
+  IvWebResponse.ContentType := 'application/javascript';                             // simulate text/javascript content
+  IvWebResponse.ContentType := MimeTypeFromContent(@m, m.Size);                      // setmime, MimeTypeFromRegistry(fe) <- not working!!!
+  IvWebResponse.SetCustomHeader(HTTP_HEADER_CONTENT_TYPE, MIME_TYPE_TEXT_XML_UTF8);  //
+  IvWebResponse.SetCustomHeader('Content-Disposition', 'filename=' + n);             // set "suggested file name" in case a user try a download and save file as
+  // no page cache in the client
+  IvWebResponse.SetCustomHeader('Expires', htt.HTTP_HEADER_EXPIRE);
+  *)
+  {$ENDREGION}
+
 end;
 
 function TAllRec.AfterDispatch(IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
 begin
-  Result := true;
+  {
+    NOW THE APPLICATION SHOULD CLEANUP AND LOGS AUDITS:
+    - update cookies
+    - log audit
+  }
 
   {$REGION 'TimersStop'}
-  wre.TimingMs := --wa0.ElapsedMilliseconds; // final total time, for partial timing use wa0.ElapsedMilliseconds no, use local
+ // wre.TimingMs := wa0.ElapsedMilliseconds; no, use local // final total time, for partial timing use wa0.ElapsedMilliseconds no, use local
 //  lg.I(wre.TimingMs.ToString + ' ms', 'AFTERDISPATCH TIMING');
   {$ENDREGION}
 
@@ -3204,6 +3268,8 @@ begin
   if IvAuditIsActive then
     wre.DbaInsert(IvFbk); // can save a request even if the user is not logged in? may be using a sessionid created anyway? so all request in the same session might be clustered
   {$ENDREGION}
+
+  Result := true;
 
 end;
 {$ENDREGION}
@@ -3248,6 +3314,45 @@ end;
 function TAskRec.YesFmt(IvMessageFormatString: string; IvVarRecVector: array of TVarRec): boolean;
 begin
   Result := Yes(Format(IvMessageFormatString, IvVarRecVector));
+end;
+{$ENDREGION}
+
+{$REGION 'TBolRec'}
+function TBolRec.FromStr(IvString: string; IvDefault: boolean): boolean;
+var
+  s: string;
+begin
+//Result := StrToBoolDef(IvString, IvDefault);
+
+  s := UpperCase(IvString);
+       if (s ='-1') or (s = '1') or (s = 'TRUE' ) or (s = 'ON' ) or (s = 'YES') or (s = 'OK') or (s = 'OPEN')  or (s = 'ENABLED' ) or (s = 'SUCCESSFUL'  ) then Result := true
+  else if (s = '0')              or (s = 'FALSE') or (s = 'OFF') or (s = 'NO' ) or (s = 'NO') or (s = 'CLOSE') or (s = 'DISABLED') or (s = 'UNSUCCESSFUL') then Result := false
+  else                                                                                                                                                          Result := IvDefault;
+end;
+
+function TBolRec.ToStr(IvBoolean, IvLowerCase: boolean): string;
+begin
+//Result := BoolToStr(IvBoolean, true);
+
+  if IvBoolean then
+    Result := 'True'
+  else
+    Result := 'False';
+
+  if IvLowerCase then
+    Result := LowerCase(Result);
+end;
+
+function TBolRec.VectorToBinaryStr(IvBooleanVec: array of boolean): string;
+var
+  i: integer;
+begin
+  Result := '';
+  for i := Low(IvBooleanVec) to High(IvBooleanVec) do
+    if IvBooleanVec[i] then
+      Result := Result + '1'
+    else
+      Result := Result + '0';
 end;
 {$ENDREGION}
 
@@ -5006,6 +5111,107 @@ begin
     IvFbk := Format('CryptoKey %s is valid and secure', [IvKey])
   else
     IvFbk := Format('CryptoKey %s is not valid or secure, it have to be at least %d digits 0..9', [IvKey, CRYPTO_KEY_MIN_LEN]);
+end;
+{$ENDREGION}
+
+{$REGION 'TCssRec'}
+function TCssRec.W3ThemeInit(IvHColor, IvName: string): string;
+var
+  l: TStrings;
+  tc: TColor;
+  l5, l4, l3, l2, l1, co, d1, d2, d3, d4, d5: string;
+begin
+  // tcolor
+  tc := col.FromHtml(IvHColor);
+
+  // levels
+  l5 := col.ToHtml(col.Lighten(tc, 50)); // light  #f9f9f9
+  l4 := col.ToHtml(col.Lighten(tc, 40)); //        #ececec
+  l3 := col.ToHtml(col.Lighten(tc, 30)); //        #d8d8d8
+  l2 := col.ToHtml(col.Lighten(tc, 20)); //        #c5c5c5
+  l1 := col.ToHtml(col.Lighten(tc, 10)); //        #b1b1b1
+  co := IvHColor;                        // normal #9e9e9e
+  d1 := col.ToHtml(col.Darken (tc, 10)); //        #8e8e8e
+  d2 := col.ToHtml(col.Darken (tc, 20)); //        #7e7e7e
+  d3 := col.ToHtml(col.Darken (tc, 30)); //        #6f6f6f
+  d4 := col.ToHtml(col.Darken (tc, 40)); //        #5f5f5f
+  d5 := col.ToHtml(col.Darken (tc, 50)); // dark   #4f4f4f
+
+  // css
+  l := TStringList.Create;
+  try
+    l.Add('/***');
+    l.Add(' * W3CSS');
+    l.Add(' */');
+    l.Add('.w3-theme-light              {color:#000 !important; background-color:' + l5 + ' !important}');
+    l.Add('.w3-theme-l5                 {color:#000 !important; background-color:' + l5 + ' !important}');
+    l.Add('.w3-theme-l4                 {color:#000 !important; background-color:' + l4 + ' !important}');
+    l.Add('.w3-theme-l3                 {color:#000 !important; background-color:' + l3 + ' !important}');
+    l.Add('.w3-theme-l2                 {color:#000 !important; background-color:' + l2 + ' !important}');
+    l.Add('.w3-theme-l1                 {color:#000 !important; background-color:' + l1 + ' !important}');
+    l.Add('.w3-theme                    {color:#000 !important; background-color:' + co + ' !important}');
+    l.Add('.w3-theme-d1                 {color:#000 !important; background-color:' + d1 + ' !important}'); // should vary: light -> 000, dark -> fff
+    l.Add('.w3-theme-d2                 {color:#fff !important; background-color:' + d2 + ' !important}');
+    l.Add('.w3-theme-d3                 {color:#fff !important; background-color:' + d3 + ' !important}');
+    l.Add('.w3-theme-d4                 {color:#fff !important; background-color:' + d4 + ' !important}');
+    l.Add('.w3-theme-d5                 {color:#fff !important; background-color:' + d5 + ' !important}');
+    l.Add('.w3-theme-dark               {color:#fff !important; background-color:' + d5 + ' !important}');
+    l.Add('');
+    l.Add('.w3-theme-action             {color:#fff !important; background-color:' + d5 + ' !important}');
+    l.Add('.w3-text-theme               {color:'                                   + co + ' !important}');
+    l.Add('.w3-border-theme             {border-color:'                            + co + ' !important}');
+    l.Add('');
+    l.Add('.w3-hover-theme:hover        {color:#000 !important; background-color:' + co + ' !important}');
+    l.Add('.w3-hover-text-theme:hover   {color:'                                   + co + ' !important}');
+    l.Add('.w3-hover-border-theme:hover {border-color:'                            + co + ' !important}');
+    l.Add('');
+    l.Add('/***');
+    l.Add(' * SCROLLBARS');
+    l.Add(' */');
+    l.Add('.w3-scrollbar::-webkit-scrollbar {width:12px;height:12px;}'                        );
+    l.Add('.w3-scrollbar::-webkit-scrollbar-track       {background:'              + d1 + ';}');
+    l.Add('.w3-scrollbar::-webkit-scrollbar-thumb       {background:'              + d2 + ';}');
+    l.Add('.w3-scrollbar::-webkit-scrollbar-thumb:hover {background:'              + d3 + ';}');
+    l.Add('.w3-scrollbar::-webkit-scrollbar-corner {background: transparent;}'                );
+    l.Add('}');
+    l.Add('');
+    l.Add('/***');
+    l.Add(' * WAITLOADER (not present in the original w3css)');
+    l.Add(' */');
+    l.Add('@-webkit-keyframes spin { /* safari */');
+    l.Add('  0% { -webkit-transform: rotate(0deg); }');
+    l.Add('  100% { -webkit-transform: rotate(360deg); }');
+    l.Add('}');
+    l.Add('@keyframes spin {');
+    l.Add('  0% { transform: rotate(0deg); }');
+    l.Add('  100% { transform: rotate(360deg); }');
+    l.Add('}');
+    l.Add('.w3-waitloader {');
+    l.Add('  width: 150px;                      /* width */');
+    l.Add('  height: 150px;                     /* height */');
+    l.Add('  border: 15px solid ' + l4 + ';     /* thickness and bgcolor */');
+    l.Add('  border-top: 15px solid ' + d2 + '; /* thickness and fgcolor */');
+    l.Add('  margin: -90px 0 0 -90px;           /* 90 = 150/2 + 15 */');
+    l.Add('  border-radius: 50%;');
+    l.Add('  position: absolute;');
+    l.Add('  top: 50%;');
+    l.Add('  left: 50%;');
+    l.Add('  z-index: 1;');
+    l.Add('  -webkit-animation: spin 2s linear infinite; /* safari */');
+    l.Add('  animation: spin 2s linear infinite;');
+    l.Add('}');
+    l.Add('');
+    l.Add('/***');
+    l.Add(' * MODAL (override)');
+    l.Add(' */');
+    l.Add('.w3-modal{');
+    l.Add('  background-color:rgb('  + Format('%d,%d,%d', [col.R(co), col.G(co), col.B(co)]) + ');');
+    l.Add('  background-color:rgba(' + Format('%d,%d,%d', [col.R(co), col.G(co), col.B(co)]) + ',0.6)');
+    l.Add('}');
+    l.SaveToFile(sys.IncPath + '\w3\w3-theme-' + IvName + '.css');
+  finally
+    l.Free;
+  end;
 end;
 {$ENDREGION}
 
@@ -15291,6 +15497,37 @@ begin
     Result := IvStart - 1 + Result;
 end;
 
+function TStrRec.PosLast(IvSubString, IvString: string): integer;
+begin
+  Result := IvString.LastIndexOf(IvSubString);
+end;
+
+function TStrRec.PosOfNth(IvSubString, IvString: string; IvNth: integer): integer;
+var
+  s: string; // str
+  i, p, r: integer; // iteration, pos, result
+begin
+  // def
+  Result := 0;
+
+  // validate
+  if ((IvNth < 1) or (IvSubString = '') or (IvString = '')) then
+    Exit;
+
+  // evaluate
+  i := 0;
+  r := 0;
+  s := IvString;
+  while (i < IvNth) do begin
+    p := Pos(IvSubString, s);
+    if (p = 0) then exit;
+    r := r + p;
+    s := Copy(IvString, r + 1, Length(IvString) - r);
+    inc(i);
+  end;
+  Result := r;
+end;
+
 function TStrRec.Proper(IvString: string): string;
 begin
   Result := UpperCase(Copy(IvString, 1, 1)) + LowerCase(Copy(IvString, 2, Length(IvString)-1));
@@ -16463,30 +16700,28 @@ end;
 
 function TWreRec.CookieGet(IvCookie, IvDefault: string): string;
 begin
-  Result := '1234';
-  Exit;
-
   if Length(WebRequest.CookieFields.Values[IvCookie]) > 0 then
     Result := WebRequest.CookieFields.Values[IvCookie]
   else
     Result := IvDefault;
 end;
 
-function TWreRec.CookieGet(IvWebRequest: TWebRequest; IvCookie, IvDefault: string): string;
-begin
-  if Length(IvWebRequest.CookieFields.Values[IvCookie]) > 0 then
-    Result := IvWebRequest.CookieFields.Values[IvCookie]
-  else
-    Result := IvDefault;
-end;
-
-function TWreRec.CookieGet(IvWebRequest: TWebRequest; IvCookie: string; IvDefault: integer): integer;
+function TWreRec.CookieGet(IvCookie: string; IvDefault: integer): integer;
 var
   s, d: string; // default
 begin
   d := IntToStr(IvDefault);
-  s := CookieGet(IvWebRequest, IvCookie, d);
+  s := CookieGet(IvCookie, d);
   Result := StrToInt(s);
+end;
+
+function TWreRec.CookieGet(IvCookie: string; IvDefault: boolean): boolean;
+var
+  s, d: string; // default
+begin
+  d := bol.ToStr(IvDefault);
+  s := CookieGet(IvCookie, d);
+  Result := bol.FromStr(s);
 end;
 
 function TWreRec.FieldExists(IvWebRequest: TWebRequest; IvField: string; var IvFbk: string): boolean;
@@ -16930,56 +17165,21 @@ end;
 {$ENDREGION}
 
 {$REGION 'TWrsRec'}
-procedure TWrsRec.CookieAdd(IvResponse: TWebResponse; IvCookie: string; IvValue: variant; IvExpireInXDay: double);
+procedure TWrsRec.CookieSet(IvCookie: string; IvValue: variant; IvExpireInXDay: double; IvDomain, IvPath: string);
 begin
-  with IvResponse.Cookies.Add do begin
-    Name    := IvCookie;
-    Value   := IvValue;
-  //Domain  := wre.Domain;
-    Path    := '/';
-  //Secure  := false;
-    Expires := Now + IvExpireInXDay;
+  with WebResponse.Cookies.Add do begin
+    Name                           := IvCookie; // key
+    Value                          := IvValue;  // value
+    if IvDomain <> '' then Domain  := IvDomain; // wre.Domain
+    Path                           := IvPath;   // '/'
+  //Secure                         := false;    // ???
+    Expires                        := Now + IvExpireInXDay;
   end;
-
-  {$REGION 'Zzz'}
-(*
-  IvCookieCol.Add;
-  IvCookieCol.Items[IvCookieCol.Count-1].Name    := IvCookie;
-  IvCookieCol.Items[IvCookieCol.Count-1].Value   := IvValue;
-//IvCookieCol.Items[IvCookieCol.Count-1].Domain  := ?;
-  IvCookieCol.Items[IvCookieCol.Count-1].Path    := '/';
-//IvCookieCol.Items[IvCookieCol.Count-1].Secure  := false;
-  IvCookieCol.Items[IvCookieCol.Count-1].Expires := Now + IvExpireInXDay;
-*)
-  {$ENDREGION}
-
 end;
 
-procedure TWrsRec.CookieDelete(IvResponse: TWebResponse; IvCookie: string);
+procedure TWrsRec.CookieDelete(IvCookie: string; IvDomain, IvPath: string);
 begin
   raise Exception.Create(NOT_IMPLEMENTED_STR);
-end;
-
-function TWrsRec.CustomHeaderAdd(IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; var IvFbk: string): boolean;
-begin
-  // samples
-//IvWebResponse.ContentType := 'text/html';                                          // simulate text/hatml content
-//IvWebResponse.ContentType := 'application/javascript';                             // simulate text/javascript content
-//IvWebResponse.ContentType := MimeTypeFromContent(@m, m.Size);                      // setmime, MimeTypeFromRegistry(fe) <- not working!!!
-//IvWebResponse.SetCustomHeader(HTTP_HEADER_CONTENT_TYPE, MIME_TYPE_TEXT_XML_UTF8);  //
-//IvWebResponse.SetCustomHeader('Content-Disposition', 'filename=' + n);             // set "suggested file name" in case a user try a download and save file as
-
-  // no page cache in the client
-  IvWebResponse.SetCustomHeader('Expires', htt.HTTP_HEADER_EXPIRE);
-
-  // cors
-  IvWebResponse.SetCustomHeader('Access-Control-Allow-Origin', '*');
-  if Trim(IvWebRequest.GetFieldByName('Access-Control-Request-Headers')) <> '' then
-    IvWebResponse.SetCustomHeader('Access-Control-Allow-Headers', IvWebRequest.GetFieldByName('Access-Control-Request-Headers'));
-
-  // logallcustomheaders
-  Result := true;
-  IvFbk := 'OK';
 end;
 {$ENDREGION}
 

@@ -34,8 +34,6 @@ object MainForm: TMainForm
     Caption = 'TopPanel'
     ShowCaption = False
     TabOrder = 0
-    ExplicitLeft = -152
-    ExplicitTop = 24
     object UrlLabel: TLabel
       Left = 8
       Top = 13
@@ -118,7 +116,6 @@ object MainForm: TMainForm
       Caption = 'Clear'
       TabOrder = 5
       OnClick = ClearButtonClick
-      ExplicitTop = 8
     end
     object LogCheckBox: TCheckBox
       Left = 495
@@ -131,9 +128,9 @@ object MainForm: TMainForm
       TabOrder = 6
     end
     object UrlComboBox: TComboBox
-      Left = 160
+      Left = 168
       Top = 10
-      Width = 177
+      Width = 169
       Height = 21
       TabOrder = 7
       Text = 'UrlComboBox'
@@ -221,6 +218,7 @@ object MainForm: TMainForm
         Pointer.Brush.BackColor = clRed
         Pointer.HorizSize = 3
         Pointer.InflateMargins = True
+        Pointer.Pen.Width = 0
         Pointer.Pen.Visible = False
         Pointer.Style = psCircle
         Pointer.VertSize = 3

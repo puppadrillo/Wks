@@ -320,6 +320,7 @@ begin
     p.Pointer.Style := psCircle;
     p.Pointer.Color := clRed;
     p.Pointer.Size  := 3;
+    p.Pointer.Pen.Visible := false;
     MainForm.TickChart.AddSeries(p);
     for i := Low(MainForm.FTickCountVec) to High(MainForm.FTickCountVec) do
       MainForm.TickChart.Series[0].AddXY(i, MainForm.FTickCountVec[i]);

@@ -52,12 +52,12 @@ uses
 {$REGION 'Events'}
 procedure TWebModule1.WebModuleCreate(Sender: TObject);
 begin
-  lgt.Tag('WEBMODULE', 'Create'); // hangiis use debugstring
+  ods('WEBMODULE', 'Create');
 end;
 
 procedure TWebModule1.WebModuleDestroy(Sender: TObject);
 begin
-  lgt.Tag('WEBMODULE', 'Destroy'); // hangiis use debugstring
+  ods('WEBMODULE', 'Destroy');
 end;
 
 procedure TWebModule1.WebModuleException(Sender: TObject; E: Exception; var Handled: Boolean);
@@ -72,12 +72,12 @@ var
   k: string;
 begin
   Inc(FCount);
-  lgt.Tag('WEBMODULE', 'BeforeDispatch ' + FCount.ToString);
+  ods('WEBMODULE BEFOREDISPATCH', FCount.ToString);
 
   {$REGION 'Objects'}
-  FWat := TStopwatch.StartNew;  lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TStopwatch started');
-  FIni := TIniCls.Create;       lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TIniCls object created');
-  FDba := TDbaCls.Create();     lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TDbaCls object created');
+  FWat := TStopwatch.StartNew;  //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TStopwatch started');
+  FIni := TIniCls.Create;       //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TIniCls object created');
+  FDba := TDbaCls.Create();     //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TDbaCls object created');
   {$ENDREGION}
 
   {$REGION 'PrepareAll'}
@@ -99,12 +99,12 @@ procedure TWebModule1.WebModuleAfterDispatch(Sender: TObject; Request: TWebReque
 var
   k: string;
 begin
-  lgt.Tag('WEBMODULE', 'AfterDispatch ' + FCount.ToString);
+  ods('WEBMODULE AFTERDISPATCH', FCount.ToString);
 
   {$REGION 'Objects'}
-  FDba.Free;                    lgt.Tag('WEBMODULE AFTERDISPATCH', 'TDbaCls object free');
-  FIni.Free;                    lgt.Tag('WEBMODULE AFTERDISPATCH', 'TIniCls object free');
-  FWat.Stop;                    lgt.Tag('WEBMODULE AFTERDISPATCH', 'TStopwatch stopped');
+  FDba.Free;                    //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TDbaCls object free');
+  FIni.Free;                    //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TIniCls object free');
+  FWat.Stop;                    //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TStopwatch stopped');
   {$ENDREGION}
 
   {$REGION 'UnprepareAll'}
@@ -128,11 +128,11 @@ var
   v: variant;
   s, k: string;
 begin
-  lgt.Tag('WEBMODULE', 'DefaultHandlerAction ' + FCount.ToString);
+  ods('WEBMODULE DEFAULTHANDLER', FCount.ToString);
 
   {$REGION 'Note'}
-  o := FDba.ScalarFD('select ''rnd:'' + convert(varchar, rand())', v, 'default', k);
-  s := Format('result %3d: %s (%s)', [FCount, v, k]);
+  o := FDba.ScalarFD('select rand()', v, 'default', k);
+  s := Format('%d: %s', [FCount, v]);
   lgt.I(s);
   {$ENDREGION}
 
@@ -152,3 +152,4 @@ end;
 {$ENDREGION}
 
 end.
+

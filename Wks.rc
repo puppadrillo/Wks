@@ -10,6 +10,7 @@
 // bitmaps
 //
   WKS_LOGO_BMP_RC                                BITMAP          ".\WksLogo.bmp"
+  WKS_LOGO_INV_BMP_RC                            BITMAP          ".\WksLogoInv.bmp"
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -17,5 +18,6 @@
 // appicon
 //
 // icon file have to be 256 color dept or brcc32 will not compile
-  AAA_APPLICATION_BIN_ICON_RC                    ICON            ".\WksIcon.ico"
+  AAA_APPLICATION_ICON_RC                        ICON            ".\WksIcon.ico"
+  AAA_APPLICATION_ICON_INV_RC                    ICON            ".\WksIconInv.ico"
 

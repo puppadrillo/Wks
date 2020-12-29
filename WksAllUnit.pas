@@ -17797,7 +17797,7 @@ end;
 if byn.IsClient then begin
 
   {$REGION 'ico'}
-  h00 := LoadIcon(HInstance, 'AAA_APPLICATION_BIN_ICON_RC');
+  h00 := LoadIcon(HInstance, 'AAA_APPLICATION_ICON_INV_RC');
   if h00 > 0 then begin
     Application.Icon.Handle := h00; // assign main icon at runtime
     ods('WKSALLUNIT INIT CLIENT', 'icon assigned');

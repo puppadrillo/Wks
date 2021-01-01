@@ -8,7 +8,7 @@ uses
   , System.Classes
   , System.Diagnostics
   , Web.HTTPApp
-  , WksAllUnit
+  , WksAllUnit, Web.HTTPProd, Web.DSProd
   ;
 {$ENDREGION}
 
@@ -46,6 +46,7 @@ implementation
 
 uses
     Winapi.Windows
+  , Data.DB
   ;
 {$ENDREGION}
 
@@ -53,18 +54,30 @@ uses
 procedure TWebModule1.WebModuleCreate(Sender: TObject);
 begin
   ods('WEBMODULE', 'Create');
+
+  {$REGION 'Objects'}
+  FIni := TIniCls.Create;      //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TIniCls object created');
+  FDba := TDbaCls.Create;      //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TDbaCls object created');
+  {$ENDREGION}
+
 end;
 
 procedure TWebModule1.WebModuleDestroy(Sender: TObject);
 begin
   ods('WEBMODULE', 'Destroy');
+
+  {$REGION 'Objects'}
+  FDba.Free;                   //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TDbaCls object free');
+  FIni.Free;                   //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TIniCls object free');
+  {$ENDREGION}
+
 end;
 
 procedure TWebModule1.WebModuleException(Sender: TObject; E: Exception; var Handled: Boolean);
 begin
-  lgt.Tag('WEBMODULE EXCEPTION', E.Message);
+  ods('WEBMODULE EXCEPTION', E.Message);
 
-  Response.Content := htm.HtmlE(FDba, 'Exception', e.Message);
+  Response.Content := e.Message;
 end;
 
 procedure TWebModule1.WebModuleBeforeDispatch(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
@@ -75,22 +88,11 @@ begin
   ods('WEBMODULE BEFOREDISPATCH', FCount.ToString);
 
   {$REGION 'Objects'}
-  FWat := TStopwatch.StartNew;  //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TStopwatch started');
-  FIni := TIniCls.Create;       //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TIniCls object created');
-  FDba := TDbaCls.Create();     //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TDbaCls object created');
+  FWat := TStopwatch.StartNew; //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TStopwatch started');
   {$ENDREGION}
 
   {$REGION 'PrepareAll'}
-  {
-    NOW THE APPLICATION SHOULD KNOW ALL ABOUT THE REQUEST:
-    - system, params, switches
-    - user, authentication, session
-    - organization, palette, smtp, pop3
-    - member, email, role, level, structure, authorization
-  }
-
-  // prepareall
-//  all.BeforeDispatch(Request, Response, FIni.BooGet('WebRequest/OtpIsActive', false), FIni.BooGet('WebRequest/AuditIsActive', true), k);
+//  all.BeforeDispatch(FDba, Request, Response, FIni.BooGet('WebRequest/OtpIsActive', false), FIni.BooGet('WebRequest/AuditIsActive', true), k);
   {$ENDREGION}
 
 end;
@@ -101,39 +103,47 @@ var
 begin
   ods('WEBMODULE AFTERDISPATCH', FCount.ToString);
 
-  {$REGION 'Objects'}
-  FDba.Free;                    //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TDbaCls object free');
-  FIni.Free;                    //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TIniCls object free');
-  FWat.Stop;                    //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TStopwatch stopped');
+  {$REGION 'UnprepareAll'}
+//  all.AfterDispatch(FDba, Request, Response, FIni.BooGet('WebRequest/OtpIsActive', false), FIni.BooGet('WebRequest/AuditIsActive', true), k);
   {$ENDREGION}
 
-  {$REGION 'UnprepareAll'}
-  {
-    NOW THE APPLICATION SHOULD CLEANUP AND CLOSE NICELY:
-    - update cookies
-    - log audit
-  }
-
-  // finishall
-//  all.AfterDispatch(Request, Response, FIni.BooGet('WebRequest/OtpIsActive', false), FIni.BooGet('WebRequest/AuditIsActive', true), k);
+  {$REGION 'Objects'}
+  FWat.Stop;                   //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TStopwatch stopped');
   {$ENDREGION}
 
 end;
 {$ENDREGION}
 
-{$REGION 'Action'}
+{$REGION 'Pages'}
 procedure TWebModule1.WebModule1DefaultHandlerAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var
   o: boolean;
-  v: variant;
-  s, k: string;
+  i: integer;
+  h, k: string;
+  d: TDataset;
 begin
   ods('WEBMODULE DEFAULTHANDLER', FCount.ToString);
 
-  {$REGION 'Note'}
-  o := FDba.ScalarFD('select rand()', v, 'default', k);
-  s := Format('%d: %s', [FCount, v]);
-  lgt.I(s);
+  {$REGION 'Load'}
+  // simple
+  if not true then begin
+    //i := rnd.Int(900, 1100);
+    //Sleep(i);
+    h := Format('<p>run: %d, sleepping: %f seconds</p>', [FCount, i/1000]);
+
+  // db
+  end else begin
+    o := FDba.DsFD('select top(10) FldDateTime, FldClientApp, FldRequestId, FldHost, FldUrl, FldPathInfo, FldQuery from DbaClient.dbo.TblRequest order by FldDateTime desc', d, k);
+    try
+      dst.ToHtml(d, h, true, true, true);
+    finally
+      d.Free;
+    end;
+    h := Format('<p>run: %d: db: %s</p>', [FCount, k]) + h;
+  end;
+
+  // log
+  lgt.I(h);
   {$ENDREGION}
 
   {$REGION 'Response'}
@@ -141,9 +151,8 @@ begin
     '<html>'
   + '<head><title>Web Server Application</title></head>'
   + '<body>'
-  + 'Web Server Application'
-  + ' - ' + DateTimeToStr(Now())
-  + ' - ' + s
+  + 'Wks Test Isapi Web Server Application - ' + DateTimeToStr(Now())
+  + h
   + '</body>'
   + '</html>';
   {$ENDREGION}

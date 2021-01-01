@@ -40,6 +40,7 @@ exports
 
 begin
   CoInitFlags := COINIT_MULTITHREADED;
+//  Application.MaxConnections := ;
   Application.Initialize;
   Application.WebModuleClass := WebModuleClass;
   Application.Run;

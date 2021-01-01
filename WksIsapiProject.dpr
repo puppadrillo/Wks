@@ -40,6 +40,7 @@ exports
 
 begin
   CoInitFlags := COINIT_MULTITHREADED;
+  Application.CacheConnections := not IsDebuggerPresent; // default is true, false will create/destroy isapidll with each request, do not use it in production
   Application.Initialize;
   Application.WebModuleClass := WebModuleClass;
   Application.Run;

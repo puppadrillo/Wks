@@ -5,6 +5,7 @@ object WebModule1: TWebModule1
   Actions = <
     item
       Default = True
+      Enabled = False
       Name = 'DefaultHandler'
       PathInfo = '/'
       OnAction = WebModule1DefaultHandlerAction

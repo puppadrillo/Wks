@@ -427,12 +427,12 @@ begin
   PortComboBox.Items.Add(':80');
   PortComboBox.Items.Add(':8080');
   UrlComboBox.Items.Add('/WksIsapiProject.dll');
-  UrlComboBox.Items.Add('/WksTestCgiProject.exe');
   UrlComboBox.Items.Add('/WksTestIsapiProject.dll');
   PathInfoComboBox.Items.Add('');
   PathInfoComboBox.Items.Add('/');
   PathInfoComboBox.Items.Add('/Default');
   PathInfoComboBox.Items.Add('/Info');
+  PathInfoComboBox.Items.Add('/Test');
 
   // ini
   f := ChangeFileExt(Application.ExeName, '.ini');

@@ -1,7 +1,8 @@
 unit WksAllUnit;
 
 // - remove : TEMPORARYCOMMENT
-// - remove : PASSWORD
+// - remove : ACCOUNTS (mesrport1)
+// - remove : PASSWORDS (lf123,igi0ade)
 // - remove : REFERENCES
 // - remove : iarussigiovannigiarussiwkslfmicroengitech
 // - remove : rva.Rv( intermedi
@@ -68,7 +69,7 @@ uses
   , System.RegularExpressionsAPI    // regex
   , System.RegularExpressions       // regex
   , System.IniFiles                 // ini
-//, System.SyncObjs                 // tcriticalsection
+  , System.SyncObjs                 // tcriticalsection
   , Data.DB                         // dataset
 //, Data.DBXJson                    // dupl?
   , Data.Win.ADODB                  // adoconnection
@@ -201,6 +202,10 @@ const
 //+ sLineBreak + 'Db0CsADO=Provider=SQLNCLI11.1;Data Source=LOCALHOST;Initial Catalog=DbaClient;User ID=sa;Password=secret;Persist Security Info=True'
   + sLineBreak + 'Db0CsFD=DriverID=Mssql;Server=LOCALHOST;Database=DbaClient;User_Name=sa;Password=secret'
   ;
+  {$ENDREGION}
+
+  {$REGION 'Connection'}
+  CONN_DEF_NAME_FD = 'WKSFDCONNECTIONPOOLED';
   {$ENDREGION}
 
   {$REGION 'Connectionstring'}
@@ -410,10 +415,10 @@ type
 
   TAllRec = record // ALL - THIS DO THINGS ALL IN ONE SHOT
   public
-    function  RecordDbaInit(var IvDbaCls: TDbaCls; IvOrganization, IvUsername: string; var IvFbk: string): boolean;
+    function  RecordDbaInit(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
     function  RecordRioInit(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
-    function  BeforeDispatch(var IvDbaCls: TDbaCls; IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
-    function  AfterDispatch (var IvDbaCls: TDbaCls; IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
+    function  BeforeDispatch(IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
+    function  AfterDispatch (IvStopwatch: TStopwatch; IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
   end;
 
   TAskRec = record // yes/no, str, int input dialog
@@ -512,7 +517,7 @@ type
     function  CsvStr() : string; // Item, BgColor, FgColor
   //function  JsonStr(): string;
     function  Vector() : TStringVector;
-    function  DbaCode(var IvDbaCls: TDbaCls; IvId: integer; var IvBlocs: integer; var IvType, IvCode, IvFbk: string): boolean;
+    function  DbaCode(IvId: integer; var IvBlocs: integer; var IvType, IvCode, IvFbk: string): boolean;
     function  RioCode(IvId: integer; var IvBlocs: integer; var IvType, IvCode, IvFbk: string): boolean;
   end;
 
@@ -748,6 +753,8 @@ type
     function  ConnADOFree(var IvADOConnection: TADOConnection; var IvFbk: string): boolean;
     function  ConnFDInit (var IvFDConnection : TFDConnection ; IvCsFD : string; var IvFbk: string): boolean;
     function  ConnFDFree (var IvFDConnection : TFDConnection ; var IvFbk: string): boolean;
+    procedure ConnPrivatePooledCreateInFDManagerInCode;
+    procedure ConnPrivatePooledCreateInFDManagerFromIni;
   end;
 
   TCryRec = record // crypto
@@ -781,7 +788,7 @@ type
 
   TCssRec = record // css
   public
-    function  W3ThemeInit(var IvDbaCls: TDbaCls; IvHColor, IvName: string): string;
+    function  W3ThemeInit(IvHColor, IvName: string): string;
   end;
 
   TDatRec = record // datetime
@@ -843,7 +850,8 @@ type
     FCsFD   : string;
     FConnFD : TFDConnection;
   public
-    constructor Create({IvCsADO: string = ''; }IvCsFD: string = '');
+    constructor Create({IvCsADO: string = ''; }IvCsFD: string = ''); overload;
+    constructor Create(IvFDManager: TFDCustomManager); overload;
     destructor  Destroy; override;
     // dba
     function  Dba(const IvDatabaseName: string): string;
@@ -890,7 +898,7 @@ type
   //function  RsADO(IvSql: string; var IvRs: _Recordset; var IvFbk: string; IvFailIfEmpty: boolean = false; IvTimeOutSec: integer = DBA_COMMAND_TIMEOUT_SEC): boolean;
     // ds-fd
     function  DsFD (IvSql: string; var IvDs: TFDDataSet; var IvFbk: string; IvFailIfEmpty: boolean = false; IvTimeOutSec: integer = DBA_COMMAND_TIMEOUT_SEC): boolean; overload;
-    function  DsFD (IvSql: string; var IvDs: TDataSet  ; var IvFbk: string; IvFailIfEmpty: boolean = false; IvTimeOutSec: integer = DBA_COMMAND_TIMEOUT_SEC): boolean; overload;
+  //function  DsFD (IvSql: string; var IvDs: TDataSet  ; var IvFbk: string; IvFailIfEmpty: boolean = false; IvTimeOutSec: integer = DBA_COMMAND_TIMEOUT_SEC): boolean; overload;
     // hierarchy
     function  HIdVecFromName      (const IvTbl, IvNameFld, IvName: string): TIntegerVector; // many id's are possible from one name
     function  HIdFromName         (const IvTbl, IvNameFld, IvName: string): integer; // only the 1st id found
@@ -900,10 +908,10 @@ type
     function  HIdFromIdOrPath     (const IvTbl, IvPathFld: string; IvIdOrPath: string): integer; overload;
     function  HIdToPath           (const IvTbl, IvPathFld: string; const IvId: integer; var IvPath: string; var IvFbk: string): boolean;
     function  HLevel              (const IvTbl: string; const IvId: integer; var IvLevel: integer; var IvFbk: string): boolean;
-    function  HParentsItemChildsDs(const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TDataSet; var IvFbk: string): boolean;
-    function  HParentsDs          (const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TDataSet; var IvFbk: string): boolean;
-    function  HChildsDs           (const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TDataSet; var IvFbk: string; IvWhere: string = ''; IvOrderBy: string = ''): boolean;
-    function  HTreeDs             (const IvTbl, IvFld, IvFldCsv: string; const IvId: integer; var IvDs: TDataSet; var IvFbk: string; IvWhere: string = ''): boolean;
+    function  HParentsItemChildsDs(const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TFDDataSet; var IvFbk: string): boolean;
+    function  HParentsDs          (const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TFDDataSet; var IvFbk: string): boolean;
+    function  HChildsDs           (const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TFDDataSet; var IvFbk: string; IvWhere: string = ''; IvOrderBy: string = ''): boolean;
+    function  HTreeDs             (const IvTbl, IvFld, IvFldCsv: string; const IvId: integer; var IvDs: TFDDataSet; var IvFbk: string; IvWhere: string = ''): boolean;
     // image
     function  ImgStreamFromSql(IvImgMemoryStream: TMemoryStream; const IvSql, IvImageField: string; var IvFbk: string): boolean;
     function  ImgPictureFromSql(IvPicture: TPicture; const IvSql  , IvImageField         : string; var IvFbk: string; IvImageNameDefault: string = ''): boolean; overload;
@@ -1072,22 +1080,22 @@ type
     function  Tc       (IvContent: string; IvClass: string = ''): string; // tablecaption                              // <caption></caption>
     function  Fa(IvIcon: string; IvStyle: string = ''): string;                                                        // <i class="fa fa-sign-in"></i>
     // pageparts
-    function  Head(var IvDbaCls: TDbaCls; IvTitle: string; IvHead: string = ''; IvCss: string = ''; IvJs: string = ''): string;               // <head></head>
-    function  Navbar(var IvDbaCls: TDbaCls; IvContent: string): string;                                                       // <nav></nav>
-    function  SidebarLeft(var IvDbaCls: TDbaCls; IvContent: string): string;                                                  // <div class="w3-sidebar w3-animate-left"></div>
-    function  SidebarRight(var IvDbaCls: TDbaCls; IvContent: string): string;                                                 // <div class="w3-sidebar w3-animate-right"></div>
-    function  Content(var IvDbaCls: TDbaCls; IvContent: string; IvContainerOn: boolean = true): string;                                       // <div class="container content"></div>
-    function  Header(var IvDbaCls: TDbaCls; IvContent: string; IvDebug: string = ''): string;                                                 // <header></header>
-    function  Footer(var IvDbaCls: TDbaCls; IvContent: string; IvDebug: string = ''): string;                                 // <footer></footer>
-    function  BottomFixed(var IvDbaCls: TDbaCls): string;                                                                                   // go top arrow
-    function  BootScript(var IvDbaCls: TDbaCls): string;                                                                                      // <script></script>
+    function  Head(IvTitle: string; IvHead: string = ''; IvCss: string = ''; IvJs: string = ''): string;               // <head></head>
+    function  Navbar(IvContent: string): string;                                                       // <nav></nav>
+    function  SidebarLeft(IvContent: string): string;                                                  // <div class="w3-sidebar w3-animate-left"></div>
+    function  SidebarRight(IvContent: string): string;                                                 // <div class="w3-sidebar w3-animate-right"></div>
+    function  Content( IvContent: string; IvContainerOn: boolean = true): string;                                       // <div class="container content"></div>
+    function  Header(IvContent: string; IvDebug: string = ''): string;                                                 // <header></header>
+    function  Footer(IvContent: string; IvDebug: string = ''): string;                                 // <footer></footer>
+    function  BottomFixed(): string;                                                                                   // go top arrow
+    function  BootScript(): string;                                                                                      // <script></script>
     // pages
-    function  Page(var IvDbaCls: TDbaCls; IvTitle, IvContent: string; IvHead: string = ''; IvCss: string = ''; IvJs: string = ''; IvHeader: string = ''; IvFooter: string = ''; IvContainerOn: boolean = true; IvBuilder: integer = 0): string; // <html></html>
-    function  PageBlank(var IvDbaCls: TDbaCls; IvTitle, IvContent: string): string;                                               // <html></html>
-    function  PageI(var IvDbaCls: TDbaCls; IvTitle: string; IvText: string = ''; IvBuilder: integer = 0): string;             // <html>info</html>
-    function  PageW(var IvDbaCls: TDbaCls; IvTitle: string; IvText: string = ''; IvBuilder: integer = 0): string;             // <html>warning</html>
-    function  PageE(var IvDbaCls: TDbaCls; IvTitle: string; IvText: string = ''; IvBuilder: integer = 0): string;             // <html>exception</html>
-    function  PageNotFound(var IvDbaCls: TDbaCls; IvBuilder: integer = 0): string;                                        // <html>not found</html>
+    function  Page(IvTitle, IvContent: string; IvHead: string = ''; IvCss: string = ''; IvJs: string = ''; IvHeader: string = ''; IvFooter: string = ''; IvContainerOn: boolean = true; IvBuilder: integer = 0): string; // <html></html>
+    function  PageBlank(IvTitle, IvContent: string): string;                                               // <html></html>
+    function  PageI(IvTitle: string; IvText: string = ''; IvBuilder: integer = 0): string;             // <html>info</html>
+    function  PageW(IvTitle: string; IvText: string = ''; IvBuilder: integer = 0): string;             // <html>warning</html>
+    function  PageE(IvTitle: string; IvText: string = ''; IvBuilder: integer = 0): string;             // <html>exception</html>
+    function  PageNotFound(IvBuilder: integer = 0): string;                                        // <html>not found</html>
     // gui
     // alerts
     function  Alert    (IvTitle: string; IvText: string = ''; IvClass: string = ''): string;                           //
@@ -1107,8 +1115,8 @@ type
     function  {Gui}Row(IvCellVec, IvClassVec, IvStyleVec: TStringVector): string;
     // table
     function  TableArr(IvArr: TStringMatrix; IvClass: string = ''; IvStyle: string = ''; IvCo: string = ''; IvCaption: string = ''; Iv1stRowIsHeader: boolean = true): string;             //
-    function  TableDs (IvDs : TDataset     ; IvClass: string = ''; IvStyle: string = ''; IvCo: string = ''; IvCaption: string = ''): string;                                               //
-    function  TableSql(var IvDbaCls: TDbaCls; IvSql: string       ; IvClass: string = ''; IvStyle: string = ''; IvCo: string = ''; IvCaption: string = ''; IvTimeOut: integer = DBA_COMMAND_TIMEOUT_SEC): string; // IvSkip, IvLimit: integer
+    function  TableDs (IvDs : TFDDataset   ; IvClass: string = ''; IvStyle: string = ''; IvCo: string = ''; IvCaption: string = ''): string;                                               //
+    function  TableSql(IvSql: string       ; IvClass: string = ''; IvStyle: string = ''; IvCo: string = ''; IvCaption: string = ''; IvTimeOut: integer = DBA_COMMAND_TIMEOUT_SEC): string; // IvSkip, IvLimit: integer
     function  TableWre: string;                                                                                         // <table>wre</table>
     // form
     function  Form(IvCoVec, IvKindVec, IvValueVec: array of string; IvClass, IvAction, IvMethod: string): string;       // <form></form>
@@ -1125,7 +1133,7 @@ type
     function  SpanCode(IvCode: string): string;                                                                         //
     // divs-widgets
     function  DivTiming(IvMs: integer): string;                                                                         // <p>rendering time</p>
-    function  DivPathInfoActions(IvWre: TWebRequest): string;                                                           // all webapp available actions
+    function  DivPathInfoActions(IvWm: TWebModule; IvWre: TWebRequest): string;                                         // all webapp available actions
     function  DivNews(IvLastHour: integer = 24): string;                                                                //
     function  DivUserProfile(IvUser, IvUserId: string): string;                                                         //
     function  DivUserInterest(IvUser, IvUserId: string): string;                                                        //
@@ -1138,10 +1146,10 @@ type
     function  DivUserMore(IvUser: string): string;                                                                      //
     // chart
     function  Chart   (IvCo, IvW, IvH, IvTitle, IvData: string): string;                                                                                              //
-    function  ChartDs (IvCo, IvW, IvH, IvTitle: string; IvDs : TDataset; IvXFld, IvYFld, IvTooltipFld: string): string;                                               //
-    function  ChartSql(var IvDbaCls: TDbaCls; IvCo, IvW, IvH, IvTitle: string; IvSql: string  ; IvXFld, IvYFld, IvTooltipFld: string; IvTimeOut: integer = DBA_COMMAND_TIMEOUT_SEC): string; //
+    function  ChartDs (IvCo, IvW, IvH, IvTitle: string; IvDs : TFDDataset; IvXFld, IvYFld, IvTooltipFld: string): string;                                               //
+    function  ChartSql(IvCo, IvW, IvH, IvTitle: string; IvSql: string    ; IvXFld, IvYFld, IvTooltipFld: string; IvTimeOut: integer = DBA_COMMAND_TIMEOUT_SEC): string; //
     // report
-    function  Report(var IvDbaCls: TDbaCls; IvId: integer): string;                                                                            // fullreport
+    function  Report(IvId: integer): string;                                                                            // fullreport
     // test
     function  TestTheme: string;                                                                                        //
     function  TestTable(IvRow, IvCol: cardinal): string;                                                                // big nxm html table string for loading test
@@ -1275,10 +1283,10 @@ type
     Url         : string;
     Binary      : TBitmap;
   //Script      : string;  // Svg
-    function  DbaInit(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
-    function  DbaSelect(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
-    function  DbaInsert(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
-    procedure DbaToDisk(var IvDbaCls: TDbaCls; IvFile, IvTable, IvField, IvWhere: string);
+    function  DbaInit(var IvFbk: string): boolean;
+    function  DbaSelect(var IvFbk: string): boolean;
+    function  DbaInsert(var IvFbk: string): boolean;
+    procedure DbaToDisk(IvFile, IvTable, IvField, IvWhere: string);
   end;
 
   TIniCls = class // ini read/write are by prefix: Root/Organization/W/Wks/User
@@ -1448,7 +1456,7 @@ type
     function  MemberAtOrganization: string;
     function  PathAlpha(IvMember: string = ''): string;
     function  UrlAlpha(IvMember: string = ''): string;
-    function  BadgePath(var IvDbaCls: TDbaCls; IvMember: string = ''): string;
+    function  BadgePath(IvMember: string = ''): string;
     function  BadgeUrl(IvMember: string = ''): string;
   end;
 
@@ -1576,13 +1584,13 @@ type
   public
     function  IdOrPathParamEnsure(IvObject, IvIdOrPathParam: string): string;
     function  IdOrPathSwitchEnsure(IvObject, IvIdOrPathSwitch: string): string;
-    function  DbaExists     (var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; var IvFbk: string ): boolean;
-    function  DbaContentGet (var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; IvDefault: string ): string;
-    function  DbaContentSet (var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; IvValue  : string ): boolean;
-    function  DbaParamGet   (var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; IvDefault: string ): string;
-    function  DbaParamSet   (var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; IvValue  : string ): boolean;
-    function  DbaSwitchGet  (var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; IvDefault: boolean): boolean;
-    function  DbaSwitchSet  (var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; IvValue  : boolean): boolean;
+    function  DbaExists     (IvObject, IvIdOrPath: string; var IvFbk: string ): boolean;
+    function  DbaContentGet (IvObject, IvIdOrPath: string; IvDefault: string ): string;
+    function  DbaContentSet (IvObject, IvIdOrPath: string; IvValue  : string ): boolean;
+    function  DbaParamGet   (IvObject, IvIdOrPath: string; IvDefault: string ): string;
+    function  DbaParamSet   (IvObject, IvIdOrPath: string; IvValue  : string ): boolean;
+    function  DbaSwitchGet  (IvObject, IvIdOrPath: string; IvDefault: boolean): boolean;
+    function  DbaSwitchSet  (IvObject, IvIdOrPath: string; IvValue  : boolean): boolean;
     function  RioExists     (IvObject, IvIdOrPath: string; var IvFbk: string ): boolean;
     function  RioContentGet (IvObject, IvIdOrPath: string; IvDefault: string ): string;
     function  RioContentSet (IvObject, IvIdOrPath: string; IvValue  : string ): boolean;
@@ -1773,11 +1781,16 @@ type
     function  EmailW(var IvFbk : string; IvToCsv, IvCcCsv, IvBcCsv, IvSubject, IvTitle, IvContent: string; IvSaveToDba: boolean = false): boolean; // /
     // disk
     function  DskInit(var IvFbk: string): boolean;   // initialize the disk stuff
-    function  DbaInit(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;   // initialize the dba stuff
-    function  DbaInsert(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
-    function  DbaSelect(var IvDbaCls: TDbaCls; const IvOrganization: string; var IvFbk: string): boolean;
+    function  DbaInit(var IvFbk: string): boolean;   // initialize the dba stuff
+    function  DbaInsert(var IvFbk: string): boolean;
+    function  DbaSelect(const IvOrganization: string; var IvFbk: string): boolean;
     // rio
     function  RioInit(const IvOrganization: string; var IvFbk: string): boolean;
+  end;
+
+  TOpsRec = record // operatingsystem
+    function ProcessIdGet: cardinal; register;
+    function ThreadIdGet: cardinal; register;
   end;
 
   TOrgRem = class(TRemotable)
@@ -1844,11 +1857,11 @@ type
     Email  : string ; // giarussi@yahoo.com
     function  SoapServerInfo(var IvFbk: string): boolean;
     function  HasKey(var IvFbk: string): boolean;
-    function  DbaSelect(var IvDbaCls: TDbaCls; var IvFbk: string; IvInsertIfNotExist: boolean = false): boolean;
+    function  DbaSelect(var IvFbk: string; IvInsertIfNotExist: boolean = false): boolean;
     function  FullName: string;
     function  PathAlpha(IvPerson: string = ''): string;
     function  UrlAlpha(IvPerson: string = ''): string;
-    function  PicturePath(var IvDbaCls: TDbaCls; IvPerson: string = ''): string;
+    function  PicturePath(IvPerson: string = ''): string;
     function  PictureUrl(IvPerson: string = ''): string;
   end;
 
@@ -2321,11 +2334,11 @@ type
   private
   //Rv: string; // RvXxx(Arg0| Arg1| Arg2)
   //function  ArgVector: TStringVector; // will return ['Arg0', 'Arg1', 'Arg2']
-    function  RvFunction (var IvDbaCls: TDbaCls; IvFunction, IvArgsList: string): string;
-    function  RvFunction2(var IvDbaCls: TDbaCls; f, a: TStringVector): string;
+    function  RvFunction (IvFunction, IvArgsList: string): string;
+    function  RvFunction2(f, a: TStringVector): string;
   public
-    function  Rv2(var IvDbaCls: TDbaCls; IvString: string; IvCommentRemove: boolean = false; IvEmptyLinesRemove: boolean = true; IvTrim: boolean = true): string; // [RvAaa(Arg0| Arg1| Arg2)]
-    function  Rv (var IvDbaCls: TDbaCls; IvString: string; IvCommentRemove: boolean = false): string; //
+    function  Rv2(IvString: string; IvCommentRemove: boolean = false; IvEmptyLinesRemove: boolean = true; IvTrim: boolean = true): string; // [RvAaa(Arg0| Arg1| Arg2)]
+    function  Rv (IvString: string; IvCommentRemove: boolean = false): string; //
     function  RvJ(IvString, IvJsonStr: string; IvReplaceFlag: TReplaceFlags = []): string;    // recursively replace all [Rv<json.path>()] with SO(IvJsonStr)['json.path'].Value // $Aaa.Bbb$ -> 123      where IvJsonStr = {"Aaa": {"Bbb": 123}, ...}
     function  RvDs(IvString: string; IvDs: TDataset): string;                                 // $FldAaa$  -> 123      where IvDs      = FldAaa=123, ...
   end;
@@ -2367,8 +2380,8 @@ type
     BeginDateTime: TDateTime;
     HasBeenOpen  : boolean;
     function  Info: string;
-    function  DbaNewAndSet(var IvDbaCls: TDbaCls; IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean; // login
-    function  DbaUnset(var IvDbaCls: TDbaCls; IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean; // logout
+    function  DbaNewAndSet(IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean; // login
+    function  DbaUnset(IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean; // logout
     function  RioOpen(IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean;
     function  RioExists(IvOrganization, IvUsername, IvSession: string; var IvFbk: string): boolean;
     function  RioClose(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
@@ -2694,14 +2707,14 @@ type
     function  Url          : string;
     function  UrlBuild(IvObj: string; IvId: string = ''; IvTail: string = ''): string;
     function  Info         : string;
-    function  Slogan(var IvDbaCls: TDbaCls)       : string;                                            // *** remove, it is for orga ***
-    function  Support(var IvDbaCls: TDbaCls)      : string;
-    function  HomePath(var IvDbaCls: TDbaCls)     : string;
-    function  IncPath(var IvDbaCls: TDbaCls)      : string;
-    function  LogoUrl(var IvDbaCls: TDbaCls)      : string;
-    function  IconUrl(var IvDbaCls: TDbaCls)      : string;
+    function  Slogan()     : string;                                            // *** remove, it is for orga ***
+    function  Support()    : string;
+    function  HomePath()   : string;
+    function  IncPath()    : string;
+    function  LogoUrl()    : string;
+    function  IconUrl()    : string;
     // dba
-    procedure DbaLog(var IvDbaCls: TDbaCls; IvHost, IvAgent, IvTag, IvValue: string; IvLifeMs: integer);
+    procedure DbaLog(IvHost, IvAgent, IvTag, IvValue: string; IvLifeMs: integer);
     // rio
     function  RioInfo      : string;
     function  RioCopyright : string;
@@ -2750,9 +2763,9 @@ type
     BitArchitecture : string;
     DateTime        : TDateTime;
     Hit             : integer;
-    function  DbaExists(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
-    function  DbaSelect(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
-    function  DbaInsert(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+    function  DbaExists(var IvFbk: string): boolean;
+    function  DbaSelect(var IvFbk: string): boolean;
+    function  DbaInsert(var IvFbk: string): boolean;
   end;
 
   TUrlRec = record // url
@@ -2820,14 +2833,14 @@ type
     function  UsernameWhere(IvOrganization, IvUsername, IvPassword: string; IvConsiderUsernameOnly: boolean): string;
     function  PathAlpha(IvUsername: string = ''): string;
     function  UrlAlpha(IvUsername: string = ''): string;
-    function  AvatarPath(var IvDbaCls: TDbaCls; IvUsername: string = ''): string;
+    function  AvatarPath(IvUsername: string = ''): string;
     function  AvatarUrl(IvUsername: string = ''): string;
     // dba
-    function  DbaExists(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
-    function  DbaIsActive(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
-    function  DbaIsAuthenticated(var IvDbaCls: TDbaCls; var IvFbk: string; IvConsiderUsernameOnly: boolean; IvPasswordSkip: boolean = false): boolean; // change to accomodate new login process, so using the session, not the password
-    function  DbaIsLoggedIn(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
-    function  DbaSelect(var IvDbaCls: TDbaCls; const IvUsername: string; var IvFbk: string): boolean;
+    function  DbaExists(var IvFbk: string): boolean;
+    function  DbaIsActive(var IvFbk: string): boolean;
+    function  DbaIsAuthenticated(var IvFbk: string; IvConsiderUsernameOnly: boolean; IvPasswordSkip: boolean = false): boolean; // change to accomodate new login process, so using the session, not the password
+    function  DbaIsLoggedIn(var IvFbk: string): boolean;
+    function  DbaSelect(const IvUsername: string; var IvFbk: string): boolean;
     // rio
     function  RioExists(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
     function  RioIsActive(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
@@ -2893,7 +2906,7 @@ type
   public
     procedure OnPaintText(   IvVst: TBaseVirtualTree  ; const TargetCanvas: TCanvas; Node: PVirtualNode; Column: TColumnIndex; TextType: TVSTTextType);
     procedure OnCompareNodes(IvVst: TBaseVirtualTree  ; Node1, Node2: PVirtualNode; Column: TColumnIndex; var Result: integer);
-    procedure GetImageIndex( IvVst: TBaseVirtualTree  ; Node: PVirtualNode; Kind: TVTImageKind; Column: TColumnIndex; var Ghosted: Boolean; var ImageIndex: TImageIndex);
+//    procedure GetImageIndex( IvVst: TBaseVirtualTree  ; Node: PVirtualNode; Kind: TVTImageKind; Column: TColumnIndex; var Ghosted: Boolean; var ImageIndex: TImageIndex);
     procedure GetNodeInfo(   IvVst: TBaseVirtualTree  ; Node: PVirtualNode; var IvPath, IvCaption: string; var IvKey, IvLevel, IvChildCount: integer);
     function  GetNodePath(   IvVst: TBaseVirtualTree  ; IvNode: PVirtualNode; IvDelimiter: char = '/'; IvUseLevels: boolean = false): string;
     procedure NodeParamSet(  IvVst: TVirtualStringTree; IvNode: PVirtualNode; IvDs: TDataSet);
@@ -2995,8 +3008,8 @@ type
   //DerivedFrom         : string;         {*empty*                                }
     // end
     TimingMs            : integer;        { -1                                    }
-    procedure Init(var IvDbaCls: TDbaCls; IvWebRequest: TWebRequest);
-    function  DbaInsert(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+    procedure Init(IvWebRequest: TWebRequest);
+    function  DbaInsert(var IvFbk: string): boolean;
     function  DbaSelectInput(var IvTable, IvField, IvWhere, IvFbk: string): boolean;
     function  DbaUpdateInput(var IvTable, IvField, IvWhere, IvValue, IvFbk: string): boolean;
     function  TkvVec: TTkvVec;
@@ -3016,6 +3029,13 @@ type
     function  UrlFull: string;          // http://www.abc.com/WksIsapiProject.dll/Page?CoId=3
   end;
 
+  TWapRec = record // webapp
+    WebModule: TWebModule;
+  public
+    procedure Reply(var IvWebResponse: TWebResponse; IvStateCode: integer; IvStateMessage: string; IvDebug: string = '');
+    function PathInfoActionIsValid(IvPathInfo: string): boolean;
+  end;
+
   TWrsRec = record // webresponse (pov=server)
     WebResponse: TWebResponse; // original web response
   public
@@ -3024,10 +3044,12 @@ type
   end;
 {$ENDREGION}
 
-{$REGION 'Vars'}
+{$REGION 'Globals'}
+// *** WARNING ***
+// in multithread application these variable are safe
+// to read but must be accessed in safe mode in write
+// ***************
 var
-//ini: TIniCls;    // ini *** NOT GLOBAL ***
-//log: TLogCls;    // log *** NOT GLOBAL ***
   h00: cardinal;   // handlespare
   all: TAllRec;    // all
   ask: TAskRec;    // ask, win-api-only-dialogs
@@ -3036,23 +3058,26 @@ var
   cns: TCnsRec;    // connectionstring
   cod: TCodRec;    // code
   col: TColRec;    // color
-  con: TConRec;    // connection
+  con: TConRec;    // connectiondb
   cry: TCryRec;    // cripto
   css: TCssRec;    // css
   dat: TDatRec;    // datetime
-//db0: TDbaCls;    // sysdb, wksdb                  (mssql)   *** NOT GLOBAL ***
+//db0: TDbaCls;    // sysdb, wksdb (mssql) *** NOT GLOBAL ***
   dot: TDotRec;    // dotobject (like Person.Person.Name <-> DbaPerson.dbo.TblPerson+FldName)
   dst: TDstRec;    // dataset
   edi: TEdiRec;    // editinfo (table)
   fbk: TFbkRec;    // feedback
   fsy: TFsyRec;    // filesystem
   iif: TIifRec;    // inlineif
+//ini: TIniCls;    // ini *** NOT GLOBAL ***
   htm: THtmRec;    // html
   htt: THttRec;    // http
   iis: TIisRec;    // inlineis
   img: TImgRec;    // image
   isa: TIsaRec;    // isapi
-  lgt: TLgtCls;    // log threaded *** GLOBAL ***
+  lmx: TCriticalSection; // log mutex (critical setcion to protect single log file writing) (TRTLCriticalSection)
+//log: TLogCls;    // log *** NOT GLOBAL ***
+//lgt: TLgtCls;    // log threaded *** NOT GLOBAL ***
   lgo: TLgoRec;    // logo
   lst: TLstRec;    // list/csv (csv or generic list like aaa/bbb/ccc or aaa|bbb|ccc)
   mat: TMatRec;    // math
@@ -3083,20 +3108,21 @@ var
   sta: TStaRec;    // state
   stm: TStmRec;    // stream
   str: TStrRec;    // string
-  sys: TSysRec;    // system
+  sys: TSysRec;    // system (wks)
   uag: TUagRec;    // useragent
   url: TUrlRec;    // url
   usr: TUsrRec;    // user
   vec: TVecRec;    // vector
   vnt: TVntRec;    // variant
   vst: TVstRec;    // virtualstringtree
-  wa0: TStopwatch; // stopwatch (only global lifetime, do not use!)
-  wre: TWreRec;    // webrequestextended
+  wa0: TStopwatch; // stopwatch (only global lifetime, do not use locally in multithread applications!)
+  wap: TWapRec;    // webapp (webmodule, webbroker)
+  wre: TWreRec;    // webrequest (extended)
   wrs: TWrsRec;    // webresponse
 {$ENDREGION}
 
 {$REGION 'Routines'}
-procedure ods(IvTag, IvText: string);
+procedure ods(IvTag: string; IvText: string = '');
 {$ENDREGION}
 
 implementation
@@ -3134,17 +3160,34 @@ uses
 
 {$REGION 'Routines'}
 procedure ods(IvTag, IvText: string);
+//var
+//  f, e: string; // filename, entry
+//  w: TStreamWriter;
 begin
-  {.$IFDEF DEBUG}
-  OutputDebugString(PWideChar(byn.Name + ' : ' + IvTag + ' : ' + IvText));
-  {.$ENDIF}
+//  if IsDebuggerPresent {or not Assigned(lmx)} then begin
+//    e := byn.Name + ' : ' + IvTag + ' : ' + IvText;
+//    OutputDebugString(PWideChar(e));
+
+    // globalLog.Add(s);
+//    if Assigned(lmx) then begin
+//      f := ChangeFileExt(byn.FileSpec, '_' + FormatDateTime('yyyy-mm', Now) + '.log');
+//      e:= Format('%s|%5d:%5d|%-32s|%s', [FormatDateTime('dd hh:nn:ss zzz', Now), GetCurrentProcessID, GetCurrentThreadID, IvTag, IvText]);
+//      lmx.Enter;
+//      w := TStreamWriter.Create(f, true, TEncoding.UTF8);
+//      try
+//        w.WriteLine(e);
+//      finally
+//        w.Free;
+//        lmx.Leave;
+//      end;
+//    end;
+//  end;
 end;
 {$ENDREGION}
 
 {$REGION 'TAllRec'}
-function TAllRec.RecordDbaInit(var IvDbaCls: TDbaCls; IvOrganization, IvUsername: string; var IvFbk: string): boolean;
+function TAllRec.RecordDbaInit(IvOrganization, IvUsername: string; var IvFbk: string): boolean;
 begin
-
   // sys (refresh some info since the record is initialized once at beginning using sys.DbaInit(), not for each request)
   //sys.HLib := obj.DbaParamGet('System', '113', 'W3');
 
@@ -3160,7 +3203,7 @@ begin
 //Result := ses.DbaNewAndSet(usr.Organization, usr.Username, usr.Password, IvFbk);
 
   // organization
-  Result := org.DbaSelect(IvDbaCls, IvOrganization, IvFbk);
+  Result := org.DbaSelect(IvOrganization, IvFbk);
 
   // smtp
   smt.Organization  := IvOrganization; // smtp is ok since 1st request because it is tied to organization
@@ -3187,7 +3230,7 @@ begin
   raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
-function TAllRec.BeforeDispatch(var IvDbaCls: TDbaCls; IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
+function TAllRec.BeforeDispatch(IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
 var
   k: string;
   v: variant;
@@ -3201,7 +3244,7 @@ begin
   }
 
   {$REGION 'WebRequestExtended'}
-  {Result :=} wre.Init(IvDbaCls, IvWebRequest);
+  {Result :=} wre.Init(IvWebRequest);
 //ods('BEFOREDISPATCH WEBREQUESTEXTENDED', 'Initialized'); // TRecHlp<TWreRec>.FieldsToJson(wre)
   {$ENDREGION}
 
@@ -3220,7 +3263,7 @@ begin
   {$ENDREGION}
 
   {$REGION 'BusinessRecord'}
-  Result := all.RecordDbaInit(IvDbaCls, wre.UserOrganization, wre.Username, IvFbk);
+  Result := all.RecordDbaInit(wre.UserOrganization, wre.Username, IvFbk);
 //  ods('BEFOREDISPATCH ALL-REC-INIT-FROM-DBA', IvFbk);
   {$ENDREGION}
 
@@ -3267,23 +3310,19 @@ begin
   *)
   {$ENDREGION}
 
+  Result := true;
 end;
 
-function TAllRec.AfterDispatch(var IvDbaCls: TDbaCls; IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
+function TAllRec.AfterDispatch(IvStopwatch: TStopwatch; IvWebRequest: TWebRequest; IvWebResponse: TWebResponse; IvOtpIsActive, IvAuditIsActive: boolean; var IvFbk: string): boolean;
 begin
-  {
-    NOW THE APPLICATION SHOULD CLEANUP AND LOGS AUDITS:
-    - update cookies
-    - log audit
-  }
 
   {$REGION 'TimersStop'}
-  //wre.TimingMs := wa0.ElapsedMilliseconds; no, use local // final total time, for partial timing use wa0.ElapsedMilliseconds no, use local
+  wre.TimingMs := IvStopwatch.ElapsedMilliseconds; // final total time, for partial timing use wa0.ElapsedMilliseconds no, use local
 //ods('AFTERDISPATCH TIMING', wre.TimingMs.ToString + ' ms');
   {$ENDREGION}
 
   {$REGION 'FinalContent'}
-  if obj.DbaSwitchGet(IvDbaCls, 'System', 'ShowRenderingTime', true) then
+  if obj.DbaSwitchGet('System', 'ShowRenderingTime', true) then
     IvWebResponse.Content := str.Replace(IvWebResponse.Content, '$RenderingTime$', htm.DivTiming(wre.TimingMs))
   else
     IvWebResponse.Content := str.Remove(IvWebResponse.Content, '$RenderingTime$');
@@ -3291,11 +3330,10 @@ begin
 
   {$REGION 'RequestLog'}
   if IvAuditIsActive then
-    wre.DbaInsert(IvDbaCls, IvFbk); // can save a request even if the user is not logged in? may be using a sessionid created anyway? so all request in the same session might be clustered
+    wre.DbaInsert(IvFbk); // can save a request even if the user is not logged in? may be using a sessionid created anyway? so all request in the same session might be clustered
   {$ENDREGION}
 
   Result := true;
-
 end;
 {$ENDREGION}
 
@@ -3982,132 +4020,138 @@ begin
   Delete(Result, 1, 1);
 end;
 
-function TCodRec.DbaCode(var IvDbaCls: TDbaCls; IvId: integer; var IvBlocs: integer; var IvType, IvCode, IvFbk: string): boolean;
+function TCodRec.DbaCode(IvId: integer; var IvBlocs: integer; var IvType, IvCode, IvFbk: string): boolean;
 var
-  ds: TDataSet;
+  ds: TFDDataSet;
+  x: TDbaCls;
   sb: TSbuRec;
   id, pi, zo: integer;
   ki, cn, co{, cm, mi, jo}, ra, mt{, od, on}, a, b, c, d: string;
 begin
+  x := TDbaCls.Create(FDManager);
+  try
 
-  {$REGION 'Query'}
-  Result := IvDbaCls.HTreeDs('DbaCode.dbo.TblCode', 'FldCode', 'FldKind, FldContent, FldReturnAs, FldMimeType', IvId, ds, IvFbk, 'FldState=''Active''');
-  if not Result then
-    Exit;
-  IvBlocs := ds.RecordCount;
-  {$ENDREGION}
+    {$REGION 'Query'}
+    Result := x.HTreeDs('DbaCode.dbo.TblCode', 'FldCode', 'FldKind, FldContent, FldReturnAs, FldMimeType', IvId, ds, IvFbk, 'FldState=''Active''');
+    if not Result then
+      Exit;
+    IvBlocs := ds.RecordCount;
+    {$ENDREGION}
 
-  {$REGION 'Validate'}
-  Result := IvBlocs >= 1;
-  if not Result then begin
-    IvFbk := Format('Unable to get library for CoLibraryId = %d, dataset is empty', [id]);
-    Exit;
-  end;
-  {$ENDREGION}
+    {$REGION 'Validate'}
+    Result := IvBlocs >= 1;
+    if not Result then begin
+      IvFbk := Format('Unable to get library for CoLibraryId = %d, dataset is empty', [id]);
+      Exit;
+    end;
+    {$ENDREGION}
 
-  {$REGION 'Root'}
-  id := ds.FieldByName('FldId'            ).AsInteger;
-  pi := ds.FieldByName('FldPId'           ).AsInteger;
-  zo := ds.FieldByName('FldOrder'         ).AsInteger;
-  ki := ds.FieldByName('FldKind'          ).AsString ;
-//st := ds.FieldByName('FldState'         ).AsString ;
-//cr := ds.FieldByName('FldCreated'       ).AsString ;
-//up := ds.FieldByName('FldUpdated'       ).AsString ;
-//oo := ds.FieldByName('FldOrganization'  ).AsInteger;
-//ow := ds.FieldByName('FldOwner'         ).AsString ;
-  cn := ds.FieldByName('FldCode'          ).AsString ;
-  co := ds.FieldByName('FldContent'       ).AsString ;
-//jo := ds.FieldByName('FldJson'          ).AsString ;
-//cm := ds.FieldByName('FldCompiled'      ).AsString ;
-//mi := ds.FieldByName('FldMinimized'     ).AsString ;
-  ra := ds.FieldByName('FldReturnAs'      ).AsString ;
-  mt := ds.FieldByName('FldMimeType'      ).AsString ;
-//od := ds.FieldByName('FldOutputDir'     ).AsString ;
-//on := ds.FieldByName('FldOutputFileName').AsString ;
-//rc := ds.FieldByName('FldRunCommand'    ).AsString;
-  {$ENDREGION}
+    {$REGION 'Root'}
+    id := ds.FieldByName('FldId'            ).AsInteger;
+    pi := ds.FieldByName('FldPId'           ).AsInteger;
+    zo := ds.FieldByName('FldOrder'         ).AsInteger;
+    ki := ds.FieldByName('FldKind'          ).AsString ;
+  //st := ds.FieldByName('FldState'         ).AsString ;
+  //cr := ds.FieldByName('FldCreated'       ).AsString ;
+  //up := ds.FieldByName('FldUpdated'       ).AsString ;
+  //oo := ds.FieldByName('FldOrganization'  ).AsInteger;
+  //ow := ds.FieldByName('FldOwner'         ).AsString ;
+    cn := ds.FieldByName('FldCode'          ).AsString ;
+    co := ds.FieldByName('FldContent'       ).AsString ;
+  //jo := ds.FieldByName('FldJson'          ).AsString ;
+  //cm := ds.FieldByName('FldCompiled'      ).AsString ;
+  //mi := ds.FieldByName('FldMinimized'     ).AsString ;
+    ra := ds.FieldByName('FldReturnAs'      ).AsString ;
+    mt := ds.FieldByName('FldMimeType'      ).AsString ;
+  //od := ds.FieldByName('FldOutputDir'     ).AsString ;
+  //on := ds.FieldByName('FldOutputFileName').AsString ;
+  //rc := ds.FieldByName('FldRunCommand'    ).AsString;
+    {$ENDREGION}
 
-  {$REGION 'Other'}
-  // type
-  IvType := iif.Str(IvBlocs = 1, 'CODE', 'LIBRARY');
+    {$REGION 'Other'}
+    // type
+    IvType := iif.Str(IvBlocs = 1, 'CODE', 'LIBRARY');
 
-  // comment
-       if ki = cod.BAT_KIND       then c := '::' // *** WARNING, POTENTIALLY INCOMPLETE ***
-  else if ki = cod.CSS_KIND       then c := ''
-  else if ki = cod.CSV_KIND       then c := ''
-  else if ki = cod.DWS_KIND       then c := '//'
-  else if ki = cod.ETL_KIND       then c := '--'
-  else if ki = cod.ETL_SQL_KIND   then c := '--'
-  else if ki = cod.ETL_MONGO_KIND then c := ''
-  else if ki = cod.HTML_KIND      then c := ''
-  else if ki = cod.ISS_KIND       then c := ';;'
-  else if ki = cod.JAVA_KIND      then c := '//'
-  else if ki = cod.JS_KIND        then c := '//'
-  else if ki = cod.JSON_KIND      then c := ''
-  else if ki = cod.PAS_KIND       then c := '//'
-  else if ki = cod.PY_KIND        then c := '##'
-  else if ki = cod.R_KIND         then c := '##'
-  else if ki = cod.SQL_KIND       then c := '--'
-  else if ki = cod.XML_KIND       then c := ''
-  else if ki = cod.TXT_KIND       then c := ''
-  else if ki = cod.INI_KIND       then c := ';;' // ???
-  ;
-  {$ENDREGION}
+    // comment
+         if ki = cod.BAT_KIND       then c := '::' // *** WARNING, POTENTIALLY INCOMPLETE ***
+    else if ki = cod.CSS_KIND       then c := ''
+    else if ki = cod.CSV_KIND       then c := ''
+    else if ki = cod.DWS_KIND       then c := '//'
+    else if ki = cod.ETL_KIND       then c := '--'
+    else if ki = cod.ETL_SQL_KIND   then c := '--'
+    else if ki = cod.ETL_MONGO_KIND then c := ''
+    else if ki = cod.HTML_KIND      then c := ''
+    else if ki = cod.ISS_KIND       then c := ';;'
+    else if ki = cod.JAVA_KIND      then c := '//'
+    else if ki = cod.JS_KIND        then c := '//'
+    else if ki = cod.JSON_KIND      then c := ''
+    else if ki = cod.PAS_KIND       then c := '//'
+    else if ki = cod.PY_KIND        then c := '##'
+    else if ki = cod.R_KIND         then c := '##'
+    else if ki = cod.SQL_KIND       then c := '--'
+    else if ki = cod.XML_KIND       then c := ''
+    else if ki = cod.TXT_KIND       then c := ''
+    else if ki = cod.INI_KIND       then c := ';;' // ???
+    ;
+    {$ENDREGION}
 
-  {$REGION 'Build'}
-  // head
-if c <> '' then begin
-  a := Format('%s   %s', [IvType, cn]);
-  b := Format('(id:%d, pid:%d, ord:%d)', [id, pi, zo]);
-  d := StringOfChar(c.Chars[0], 80);
-  sb.Add(d, 0);
-  sb.Fmt('%s %-40s%37s', [c, a, b]);
-  sb.Add(d);
-  sb.Emp;
-end;
-
-  // rootadd
-  sb.Add(Trim(co));
-  // next
-  ds.Next;
-
-  // childsaddifany
-  while not ds.Eof do begin
-    // item
-    id := ds.FieldByName('FldId'     ).AsInteger;
-    pi := ds.FieldByName('FldPId'    ).AsInteger;
-    zo := ds.FieldByName('FldOrder'  ).AsInteger;
-    cn := ds.FieldByName('FldCode'   ).AsString;
-    co := ds.FieldByName('FldContent').AsString;
-
-    // append
+    {$REGION 'Build'}
+    // head
   if c <> '' then begin
-    a := Format('B L O K   %s', [cn]);
+    a := Format('%s   %s', [IvType, cn]);
     b := Format('(id:%d, pid:%d, ord:%d)', [id, pi, zo]);
+    d := StringOfChar(c.Chars[0], 80);
+    sb.Add(d, 0);
+    sb.Fmt('%s %-40s%37s', [c, a, b]);
+    sb.Add(d);
     sb.Emp;
+  end;
+
+    // rootadd
+    sb.Add(Trim(co));
+    // next
+    ds.Next;
+
+    // childsaddifany
+    while not ds.Eof do begin
+      // item
+      id := ds.FieldByName('FldId'     ).AsInteger;
+      pi := ds.FieldByName('FldPId'    ).AsInteger;
+      zo := ds.FieldByName('FldOrder'  ).AsInteger;
+      cn := ds.FieldByName('FldCode'   ).AsString;
+      co := ds.FieldByName('FldContent').AsString;
+
+      // append
+    if c <> '' then begin
+      a := Format('B L O K   %s', [cn]);
+      b := Format('(id:%d, pid:%d, ord:%d)', [id, pi, zo]);
+      sb.Emp;
+      sb.Emp;
+      sb.Fmt('%s %-35s%42s', [c, a, b]);
+      sb.Add(d);
+    end;
+      sb.Add(Trim(co));
+
+      ds.Next;
+    end;
+
+    // tail
+  if c <> '' then begin
     sb.Emp;
-    sb.Fmt('%s %-35s%42s', [c, a, b]);
+    a := Format('END', [cn]);
+    b := Format('(generated by wks @ %s in %d ms)', [DateTimeToStr(Now), {FWat.Elapsed.Milliseconds}-1]); // *** no, use local ***
+    sb.Add(d);
+    sb.Fmt('%s %-20s%57s', [c, a, b]);
     sb.Add(d);
   end;
-    sb.Add(Trim(co));
 
-    ds.Next;
+    // library
+  //  IvCode := rva.Rv(sb.Text);
+    {$ENDREGION}
+
+  finally
+    FreeAndNil(x);
   end;
-
-  // tail
-if c <> '' then begin
-  sb.Emp;
-  a := Format('END', [cn]);
-  b := Format('(generated by wks @ %s in %d ms)', [DateTimeToStr(Now), {FWat.Elapsed.Milliseconds}-1]); // *** no, use local ***
-  sb.Add(d);
-  sb.Fmt('%s %-20s%57s', [c, a, b]);
-  sb.Add(d);
-end;
-
-  // library
-//  IvCode := rva.Rv(sb.Text);
-  {$ENDREGION}
-
 end;
 
 function TCodRec.RioCode(IvId: integer; var IvBlocs: integer; var IvType, IvCode, IvFbk: string): boolean;
@@ -5076,6 +5120,36 @@ begin
     end;
   end;
 end;
+
+procedure TConRec.ConnPrivatePooledCreateInFDManagerInCode;
+var
+  p: TStrings; // params
+begin
+  p := TStringList.Create;
+  try
+    p.Add('Server=LOCALHOST');
+    p.Add('Database=DbaClient');
+    p.Add('User_Name=sa');
+    p.Add('Password=Igi0Ade');
+    p.Add('POOL_CleanupTimeout=60000'); // default 30000 ms
+    p.Add('POOL_ExpireTimeout=600000'); // default 90000 ms
+    p.Add('POOL_MaximumItems=60');      // maximum number of connections, default 50
+    p.Add('Pooled=True');
+    FDManager.Close;
+    FDManager.AddConnectionDef(CONN_DEF_NAME_FD, 'Mssql', p);
+    FDManager.Active := true;
+  finally
+    p.Free;
+  end;
+end;
+
+procedure TConRec.ConnPrivatePooledCreateInFDManagerFromIni;
+begin
+  FDManager.ConnectionDefFileName := Format('..\..\WksFDConnection_%s.ini', [net.Host]);
+  ods('TCONREC', FDManager.ConnectionDefFileName);
+  FDManager.LoadConnectionDefFile;
+  FDManager.Active := true;
+end;
 {$ENDREGION}
 
 {$REGION 'TCryRec'}
@@ -5140,7 +5214,7 @@ end;
 {$ENDREGION}
 
 {$REGION 'TCssRec'}
-function TCssRec.W3ThemeInit(var IvDbaCls: TDbaCls; IvHColor, IvName: string): string;
+function TCssRec.W3ThemeInit(IvHColor, IvName: string): string;
 var
   l: TStrings;
   tc: TColor;
@@ -5233,7 +5307,7 @@ begin
     l.Add('  background-color:rgb('  + Format('%d,%d,%d', [col.R(co), col.G(co), col.B(co)]) + ');');
     l.Add('  background-color:rgba(' + Format('%d,%d,%d', [col.R(co), col.G(co), col.B(co)]) + ',0.6)');
     l.Add('}');
-    l.SaveToFile(sys.IncPath(IvDbaCls) + '\w3\w3-theme-' + IvName + '.css');
+    l.SaveToFile(sys.IncPath + '\w3\w3-theme-' + IvName + '.css');
   finally
     l.Free;
   end;
@@ -5476,6 +5550,14 @@ begin
 
 end;
 
+constructor TDbaCls.Create(IvFDManager: TFDCustomManager);
+begin
+  FFDGUIxSilentMode := true; // suppress whait cursor?
+  FConnFD := TFDConnection.Create(nil);
+  FConnFD.LoginPrompt := false;
+  FConnFD.ConnectionDefName := CONN_DEF_NAME_FD;
+end;
+
 destructor TDbaCls.Destroy;
 var
   k: string;
@@ -5630,7 +5712,7 @@ begin
     end;
   end;
 end;
-
+(*
 function TDbaCls.DsFD(IvSql: string; var IvDs: TDataSet; var IvFbk: string; IvFailIfEmpty: boolean; IvTimeOutSec: integer): boolean;
 var
   d: TFDDataSet;
@@ -5644,7 +5726,7 @@ begin
   //d.Free;
   end;
 end;
-(*
+
 function  TDbaCls.ExecADO(IvSql: string; var IvAffected: integer; var IvFbk: string; IvTimeOutSec: integer): boolean;
 begin
   try
@@ -5849,7 +5931,7 @@ begin
     Result := nil;
 end;
 
-function TDbaCls.HChildsDs(const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TDataSet; var IvFbk: string; IvWhere, IvOrderBy: string): boolean;
+function TDbaCls.HChildsDs(const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TFDDataSet; var IvFbk: string; IvWhere, IvOrderBy: string): boolean;
 
   {$REGION 'var'}
 {
@@ -5886,7 +5968,6 @@ begin
   + sLineBreak + 'option(maxrecursion 32767)' // in calling the cte, by default it is 100
   ;
   Result := DsFD(q, IvDs, IvFbk);
-//LogDs(IvDs); // rimane su eof se si usa FD e quindi spacca tutto!
 end;
 
 function TDbaCls.HIdFromIdOrPath(const IvTbl, IvPathFld: string; IvIdOrPath: string; var IvId: integer; var IvFbk: string): boolean;
@@ -5967,7 +6048,7 @@ end;
 
 function TDbaCls.HIdToPath(const IvTbl, IvPathFld: string; const IvId: integer; var IvPath, IvFbk: string): boolean;
 var
-  d: TDataSet;
+  d: TFDDataSet;
 begin
   Result := HParentsDs(IvTbl, IvPathFld, IvId, d, IvFbk);
   if not Result then
@@ -6006,7 +6087,7 @@ begin
   Result := true;
 end;
 
-function TDbaCls.HParentsDs(const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TDataSet; var IvFbk: string): boolean;
+function TDbaCls.HParentsDs(const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TFDDataSet; var IvFbk: string): boolean;
 
   {$REGION 'var'}
 {
@@ -6037,10 +6118,9 @@ begin
   + sLineBreak + 'option(maxrecursion 32767)'
   ;
   Result := DsFD(q, IvDs, IvFbk);
-//LogDs(IvDs); // rimane su eof se si usa FD e quindi spacca tutto!
 end;
 
-function TDbaCls.HParentsItemChildsDs(const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TDataSet; var IvFbk: string): boolean;
+function TDbaCls.HParentsItemChildsDs(const IvTbl, IvFldCsv: string; const IvId: integer; var IvDs: TFDDataSet; var IvFbk: string): boolean;
 
   {$REGION 'var'}
 {
@@ -6110,10 +6190,9 @@ begin
   ;
 
   Result := DsFD(q, IvDs, IvFbk);
-//LogDs(IvDs); // rimane su eof se si usa FD e quindi spacca tutto!
 end;
 
-function TDbaCls.HTreeDs(const IvTbl, IvFld, IvFldCsv: string; const IvId: integer; var IvDs: TDataSet; var IvFbk: string; IvWhere: string): boolean;
+function TDbaCls.HTreeDs(const IvTbl, IvFld, IvFldCsv: string; const IvId: integer; var IvDs: TFDDataSet; var IvFbk: string; IvWhere: string): boolean;
 
   {$REGION 'var'}
 {
@@ -7173,10 +7252,15 @@ var
   r, c: integer;
   l: string;
 begin
-  // init
-  IvHtml := '';
-  if IvDs.IsEmpty or (not Assigned(IvDs.Fields)) then
+  // exit
+  if not Assigned(IvDs.Fields) then begin
+    IvHtml := 'No Data (dataset not assigned)';
     Exit;
+  end;
+  if IvDs.IsEmpty or (not Assigned(IvDs.Fields)) then begin
+    IvHtml := 'No Data (dataset is empty)';
+    Exit;
+  end;
 
   // header
   if IvHeaderAdd then begin
@@ -7989,7 +8073,7 @@ end;
   {$ENDREGION}
 
   {$REGION 'pageparts'}
-function THtmRec.Head(var IvDbaCls: TDbaCls; IvTitle, IvHead, IvCss, IvJs: string): string;
+function THtmRec.Head(IvTitle, IvHead, IvCss, IvJs: string): string;
 begin
   Result :=           sLineBreak + '<!-- Head -->'
                     + sLineBreak + '<head>'
@@ -8025,7 +8109,7 @@ begin
                     + sLineBreak + '</head>';
 end;
 
-function THtmRec.Navbar(var IvDbaCls: TDbaCls; IvContent: string): string;
+function THtmRec.Navbar(IvContent: string): string;
 var
   a, b: string;
 begin
@@ -8041,7 +8125,7 @@ begin
                   //+ sLineBreak + '    <a href="javascript:void(0);" onclick="pageReload()"><img src="' + sys.LOGO_URL + '" alt="" class="w3-image" style="height:18px"></a>'
                     + sLineBreak + '  </div>'
                     ;
-                  if obj.DbaSwitchGet(IvDbaCls, 'System', 'ShowNavIcons', false) then
+                  if obj.DbaSwitchGet('System', 'ShowNavIcons', false) then
   Result := Result  + sLineBreak + '  <a href="' + b + '/Home" class="w3-bar-item w3-button w3-hide-small w3-padding-large w3-hover-white" title="Home"><i class="fa fa-home"></i></a>'
                     + sLineBreak + '  <a href="' + b + '/Social" class="w3-bar-item w3-button w3-hide-small w3-padding-large w3-hover-white" title="Social"><i class="fa fa-paw"></i></a>'
                     + sLineBreak + '  <a href="' + b + '/Account" class="w3-bar-item w3-button w3-hide-small w3-padding-large w3-hover-white" title="Account Settings"><i class="fa fa-user"></i></a>'
@@ -8057,7 +8141,7 @@ begin
                   //+ sLineBreak + '    </div>'
                   //+ sLineBreak + '  </div>'
                     ;
-                  if obj.DbaSwitchGet(IvDbaCls, 'System', 'ShowUserAvatar', false) then
+                  if obj.DbaSwitchGet('System', 'ShowUserAvatar', false) then
   Result := Result  + sLineBreak + '  <a href="javascript:void(0);" onclick="domBlockToggle(''CoSidebarRight'')" class="w3-bar-item w3-button w3-hide-small w3-right w3-hover-white" style="padding:4px 16px" title="' + wre.Username + '">'
                     + sLineBreak + '    <img src="/User/G/giarussi/giarussi.png" alt="" class="w3-circle" style="height:43px;width:43px" alt="' + wre.Username + '">'
                     + sLineBreak + '  </a>'
@@ -8074,71 +8158,78 @@ begin
                     ;
 end;
 
-function THtmRec.SidebarLeft(var IvDbaCls: TDbaCls; IvContent: string): string;
+function THtmRec.SidebarLeft(IvContent: string): string;
 var
   i, j, l, m: integer; // pageorgid, menuid, counter, menulev
   a, c, k: string; // caption
-  d: TDataset;
+  d: TFDDataset;
+  x: TDbaCls;
 begin
-  // ids
-  i := IvDbaCls.HIdFromPath('DbaPage.dbo.TblPage', 'FldPage', org.TreePath);
-  j := wre.IntGet('CoMenuId', -1);
-  if j = -1 then
-    j := i;
+  x := TDbaCls.Create(FDManager);
+  try
+    // ids
+    i := x.HIdFromPath('DbaPage.dbo.TblPage', 'FldPage', org.TreePath);
+    j := wre.IntGet('CoMenuId', -1);
+    if j = -1 then
+      j := i;
 
-  // ds
-  IvDbaCls.HParentsItemChildsDs('DbaPage.dbo.TblPage', 'FldPage, FldMenu', j, d, k);
+    // ds
+    x.HParentsItemChildsDs('DbaPage.dbo.TblPage', 'FldPage, FldMenu', j, d, k);
 
-  // skip
-  d.Next; // Root
-  d.Next; //   Organization
-  d.Next; //     A
+    // skip
+    d.Next; // Root
+    d.Next; //   Organization
+    d.Next; //     A
 
-  // loop
-  m := 0;
-  for l := 3 to d.RecordCount - 1 do begin
-    c := iif.NxD(d.FieldByName('FldMenu').AsString, d.FieldByName('FldPage').AsString);
+    // loop
+    m := 0;
+    for l := 3 to d.RecordCount - 1 do begin
+      c := iif.NxD(d.FieldByName('FldMenu').AsString, d.FieldByName('FldPage').AsString);
 
-    if d.FieldByName('FldState').AsString = sta.Active.Key then begin
-      if          m = 0 then begin
-        a := a + sLineBreak + Format('<a href="%s/Page?CoId=%d&CoMenuId=%d" class="w3-bar-item w3-button w3-theme-d2" style="padding:14px 8px 15px 8px">%s</a>', [
-          wre.ScriptName
-        , d.FieldByName('FldId').AsInteger
-        , d.FieldByName('FldId').AsInteger
-        , c
-        ]);
-        m := 1; // justonetime
+      if d.FieldByName('FldState').AsString = sta.Active.Key then begin
+        if          m = 0 then begin
+          a := a + sLineBreak + Format('<a href="%s/Page?CoId=%d&CoMenuId=%d" class="w3-bar-item w3-button w3-theme-d2" style="padding:14px 8px 15px 8px">%s</a>', [
+            wre.ScriptName
+          , d.FieldByName('FldId').AsInteger
+          , d.FieldByName('FldId').AsInteger
+          , c
+          ]);
+          m := 1; // justonetime
 
-      end else if d.FieldByName('FldLevelRel').AsInteger <= 0 then begin
-        a := a + sLineBreak + Format('<a href="%s/Page?CoId=%d&CoMenuId=%d" class="w3-bar-item w3-button w3-theme-' + ifthen(d.FieldByName('FldLevelRel').AsInteger = 0, 'd2', 'd2') + '">%s</a>', [
-          wre.ScriptName
-        , d.FieldByName('FldId').AsInteger
-        , d.FieldByName('FldId').AsInteger
-        , c
-        ]);
+        end else if d.FieldByName('FldLevelRel').AsInteger <= 0 then begin
+          a := a + sLineBreak + Format('<a href="%s/Page?CoId=%d&CoMenuId=%d" class="w3-bar-item w3-button w3-theme-' + ifthen(d.FieldByName('FldLevelRel').AsInteger = 0, 'd2', 'd2') + '">%s</a>', [
+            wre.ScriptName
+          , d.FieldByName('FldId').AsInteger
+          , d.FieldByName('FldId').AsInteger
+          , c
+          ]);
 
-      end else begin
-        a := a + sLineBreak + Format('<a href="%s/Page?CoId=%d&CoMenuId=%d" class="w3-bar-item w3-button w3-theme-d1 w3-small" style="padding: 4px 16px">%s%s</a>', [
-          wre.ScriptName
-        , d.FieldByName('FldId').AsInteger
-        , iif.Int(d.FieldByName('FldChilds').AsInteger > 0, d.FieldByName('FldId').AsInteger, j)
-        , c
-        , ifthen(d.FieldByName('FldChilds').AsInteger > 0, '<i class="fa fa-caret-right w3-right"></i>', '')
-        ]);
+        end else begin
+          a := a + sLineBreak + Format('<a href="%s/Page?CoId=%d&CoMenuId=%d" class="w3-bar-item w3-button w3-theme-d1 w3-small" style="padding: 4px 16px">%s%s</a>', [
+            wre.ScriptName
+          , d.FieldByName('FldId').AsInteger
+          , iif.Int(d.FieldByName('FldChilds').AsInteger > 0, d.FieldByName('FldId').AsInteger, j)
+          , c
+          , ifthen(d.FieldByName('FldChilds').AsInteger > 0, '<i class="fa fa-caret-right w3-right"></i>', '')
+          ]);
+        end;
       end;
+
+      d.Next;
     end;
 
-    d.Next;
+    // html
+    Result :=           sLineBreak + '<!-- Sidebar Left -->' // w3-animate-left w3-card w3-border-right w3-border-theme
+                      + sLineBreak + '<div class="w3-sidebar w3-bar-block w3-theme-d1 w3-scrollbar wks-rtl" style="' + ifthen(wre.BoolGet('CoSidebarLeftShow', false, true), 'width:200px', 'display:none') + ';" id="CoSidebarLeft">'
+                                   + a
+                      + sLineBreak + '</div>';
+  finally
+    FreeAndNil(d);
+    FreeAndNil(x);
   end;
-
-  // html
-  Result :=           sLineBreak + '<!-- Sidebar Left -->' // w3-animate-left w3-card w3-border-right w3-border-theme
-                    + sLineBreak + '<div class="w3-sidebar w3-bar-block w3-theme-d1 w3-scrollbar wks-rtl" style="' + ifthen(wre.BoolGet('CoSidebarLeftShow', false, true), 'width:200px', 'display:none') + ';" id="CoSidebarLeft">'
-                                 + a
-                    + sLineBreak + '</div>';
 end;
 
-function THtmRec.SidebarRight(var IvDbaCls: TDbaCls; IvContent: string): string;
+function THtmRec.SidebarRight(IvContent: string): string;
 const
   S = 'width:16px;text-align:center;margin-right:16px';
 begin
@@ -8160,7 +8251,7 @@ begin
                      + sLineBreak + '</div>';
 end;
 
-function THtmRec.Content(var IvDbaCls: TDbaCls; IvContent: string; IvContainerOn: boolean): string;
+function THtmRec.Content(IvContent: string; IvContainerOn: boolean): string;
 begin
   Result :=           sLineBreak + '<!-- Content -->'
                     + ifthen(IvContainerOn, sLineBreak + '<div class="w3-container w3-content" style="max-width:1900px">') // style="max-width:1400px;margin-top:50px" notice the margin-top !
@@ -8168,16 +8259,16 @@ begin
                     + ifthen(IvContainerOn, sLineBreak + '</div>');
 end;
 
-function THtmRec.Header(var IvDbaCls: TDbaCls; IvContent, IvDebug: string): string;
+function THtmRec.Header(IvContent, IvDebug: string): string;
 begin
   Result := IvContent;
 end;
 
-function THtmRec.Footer(var IvDbaCls: TDbaCls; IvContent, IvDebug: string): string;
+function THtmRec.Footer(IvContent, IvDebug: string): string;
 var
   c: string;
 begin
-  c := rva.Rv(IvDbaCls, IvContent); // because might be empty
+  c := rva.Rv(IvContent); // because might be empty
   Result := '';
   if c <> ''       then Result :=
                       sLineBreak + '<!-- Footer -->'
@@ -8190,9 +8281,9 @@ begin
                     + sLineBreak + '  <p>' + IvDebug + '</p>'
                     + sLineBreak + '</footer>';
 
-  if obj.DbaSwitchGet(IvDbaCls, 'System', 'ShowPoweredBy', false) then Result := Result
+  if obj.DbaSwitchGet('System', 'ShowPoweredBy', false) then Result := Result
                     + sLineBreak + '<footer class="w3-container w3-theme-d1">'
-                    + sLineBreak + '  <p class="w3-center">Powered by <a href="' + sys.Url + '" target="_blank"> <img src="' + sys.IconUrl(IvDbaCls) + '" alt="" class="w3-image" style="height:24px" title="' + sys.NAME + '"></a></p>'
+                    + sLineBreak + '  <p class="w3-center">Powered by <a href="' + sys.Url + '" target="_blank"> <img src="' + sys.IconUrl() + '" alt="" class="w3-image" style="height:24px" title="' + sys.NAME + '"></a></p>'
                     + sLineBreak + '</footer>';
 
   Result := Result
@@ -8201,7 +8292,7 @@ begin
                     + sLineBreak + '</footer>';
 end;
 
-function THtmRec.BottomFixed(var IvDbaCls: TDbaCls): string;
+function THtmRec.BottomFixed(): string;
 begin
   Result :=                        '<!-- BottomFixed -->'                                                                                                                     //#[RvOrganizationFgColor()]
                   //+ sLineBreak + '<div id="CoGoToTopButton" onclick="GoToTopFunction()" style="display:none;position:fixed;width:40px;height:40px;border-radius:3px;background:orange;bottom:12px;right:20px;cursor:pointer;z-index:99;">'
@@ -8226,7 +8317,7 @@ end;
   {$ENDREGION}
 
   {$REGION 'pages'}
-function THtmRec.Page(var IvDbaCls: TDbaCls; IvTitle, IvContent, IvHead, IvCss, IvJs, IvHeader, IvFooter: string; IvContainerOn: boolean; IvBuilder: integer): string;
+function THtmRec.Page(IvTitle, IvContent, IvHead, IvCss, IvJs, IvHeader, IvFooter: string; IvContainerOn: boolean; IvBuilder: integer): string;
 var
   b: TStringBuilder;
   t: TTextWriter;
@@ -8237,19 +8328,19 @@ begin
     d := ''; // 'Page assembled with trivial string concatenation'
     Result :=                      '<!DOCTYPE html>'
                     + sLineBreak + '<html lang="en-US">'
-                    + sLineBreak +    Head(IvDbaCls, IvTitle, IvHead, IvCss, IvJs)
+                    + sLineBreak +    Head(IvTitle, IvHead, IvCss, IvJs)
                     + sLineBreak + '<body>' // class="w3-theme"
-                    + sLineBreak +    SidebarLeft(IvDbaCls, '')
-                    + sLineBreak +    SidebarRight(IvDbaCls, '')
+                    + sLineBreak +    SidebarLeft('')
+                    + sLineBreak +    SidebarRight('')
                     + sLineBreak +   '<!-- MiddleBlock -->'
                     + sLineBreak +   '<div id="CoMiddleBlock"' + ifthen(wre.BoolGet('CoSidebarLeftShow', false, true), ' style="margin-left:200px"') + '>'
-                    + sLineBreak +      Navbar(IvDbaCls, '')
-                    + sLineBreak +      Header(IvDbaCls, IvHeader, d)
-                    + sLineBreak +      Content(IvDbaCls, IvContent, IvContainerOn)
-                    + sLineBreak +      Footer(IvDbaCls, IvFooter, d)
+                    + sLineBreak +      Navbar('')
+                    + sLineBreak +      Header(IvHeader, d)
+                    + sLineBreak +      Content(IvContent, IvContainerOn)
+                    + sLineBreak +      Footer(IvFooter, d)
                     + sLineBreak +   '</div>'
-                    + sLineBreak +    BottomFixed(IvDbaCls)
-                    + sLineBreak +    BootScript(IvDbaCls)
+                    + sLineBreak +    BottomFixed()
+                    + sLineBreak +    BootScript()
                     + sLineBreak + '</body>'
                     + sLineBreak + '</html>';
 
@@ -8260,12 +8351,12 @@ begin
     try
       b.Append('<!DOCTYPE html>');
       b.Append('<html lang="en-US">');
-      b.Append(Head(IvDbaCls, IvTitle));
+      b.Append(Head(IvTitle));
       b.Append('<body class="w3-theme">');
-      b.Append(Navbar(IvDbaCls, ''));
-      b.Append(Content(IvDbaCls, IvContent));
-      b.Append(Footer(IvDbaCls, IvFooter, d));
-      b.Append(BootScript(IvDbaCls));
+      b.Append(Navbar(''));
+      b.Append(Content(IvContent));
+      b.Append(Footer(IvFooter, d));
+      b.Append(BootScript());
       b.Append('</body>');
       b.Append('</html>');
       Result := b.ToString;
@@ -8295,26 +8386,26 @@ begin
   end;
 
   // rv
-  Result := rva.Rv(IvDbaCls, Result);
+  Result := rva.Rv(Result);
 end;
 
-function THtmRec.PageBlank(var IvDbaCls: TDbaCls; IvTitle, IvContent: string): string;
+function THtmRec.PageBlank(IvTitle, IvContent: string): string;
 begin
   Result :=                        '<!DOCTYPE html>'
                     + sLineBreak + '<html lang="en-US">'
-                    + sLineBreak +    Head(IvDbaCls, IvTitle)
+                    + sLineBreak +    Head(IvTitle)
                     + sLineBreak + '<body class="w3-theme">'
-                    + sLineBreak +    Content(IvDbaCls, IvContent)
+                    + sLineBreak +    Content(IvContent)
                     + sLineBreak + '</body>'
                     + sLineBreak + '</html>';
 
   // rv
-  Result := rva.Rv(IvDbaCls, Result);
+  Result := rva.Rv(Result);
 end;
 
-function THtmRec.PageI(var IvDbaCls: TDbaCls; IvTitle, IvText: string; IvBuilder: integer): string;
+function THtmRec.PageI(IvTitle, IvText: string; IvBuilder: integer): string;
 begin
-  Result := Page(IvDbaCls,
+  Result := Page(
     'Info'
   , SpaceV()
   + H(2, IvTitle)
@@ -8323,9 +8414,9 @@ begin
   );
 end;
 
-function THtmRec.PageW(var IvDbaCls: TDbaCls; IvTitle, IvText: string; IvBuilder: integer): string;
+function THtmRec.PageW(IvTitle, IvText: string; IvBuilder: integer): string;
 begin
-  Result := Page(IvDbaCls,
+  Result := Page(
     'Warning'
   , SpaceV()
   + AlertW(IvTitle, IvText)
@@ -8333,9 +8424,9 @@ begin
   );
 end;
 
-function THtmRec.PageE(var IvDbaCls: TDbaCls; IvTitle, IvText: string; IvBuilder: integer): string;
+function THtmRec.PageE(IvTitle, IvText: string; IvBuilder: integer): string;
 begin
-  Result := Page(IvDbaCls,
+  Result := Page(
     'Exception'
   , SpaceV()
   + AlertE(IvTitle, IvText)
@@ -8343,9 +8434,9 @@ begin
   );
 end;
 
-function THtmRec.PageNotFound(var IvDbaCls: TDbaCls; IvBuilder: integer): string;
+function THtmRec.PageNotFound(IvBuilder: integer): string;
 begin
-  Result := Page(IvDbaCls,
+  Result := Page(
     'PageNotFound'
   , SpaceV()
   + AlertW('Page Not Found', Format('The requested page %s%s%s?%s is inactive or it does not exists', [wre.ServerHost, wre.Url, wre.PathInfo, wre.Query]))
@@ -8460,7 +8551,7 @@ begin
   Result := Table(Result, IvClass, IvStyle, IvCo, IvCaption);
 end;
 
-function THtmRec.TableDs(IvDs: TDataset; IvClass, IvStyle, IvCo, IvCaption: string): string;
+function THtmRec.TableDs(IvDs: TFDDataset; IvClass, IvStyle, IvCo, IvCaption: string): string;
 var
 
   {$REGION 'var'}
@@ -8573,10 +8664,11 @@ begin
 
 end;
 
-function THtmRec.TableSql(var IvDbaCls: TDbaCls; IvSql, IvClass, IvStyle, IvCo, IvCaption: string; IvTimeOut: integer): string;
+function THtmRec.TableSql(IvSql, IvClass, IvStyle, IvCo, IvCaption: string; IvTimeOut: integer): string;
 var
   k: string;
-  d: TDataset;
+  d: TFDDataset;
+  x: TDbaCls;
 begin
 
   {$REGION 'exit'}
@@ -8586,14 +8678,20 @@ begin
   end;
   {$ENDREGION}
 
-  {$REGION 'ds'}
-  if not IvDbaCls.DsFD(IvSql, d, k, true, IvTimeOut) then begin
-    Result := Panel(k);
-    Exit
-  end;
-  Result := TableDs(d, IvClass, IvStyle, IvCo, IvCaption);
-  {$ENDREGION}
+  x := TDbaCls.Create(FDManager);
+  try
 
+    {$REGION 'ds'}
+    if not x.DsFD(IvSql, d, k, true, IvTimeOut) then begin
+      Result := Panel(k);
+      Exit
+    end;
+    Result := TableDs(d, IvClass, IvStyle, IvCo, IvCaption);
+    {$ENDREGION}
+
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
 function THtmRec.TableWre: string;
@@ -8731,7 +8829,7 @@ begin
   + sLineBreak + '</script>';
 end;
 
-function THtmRec.ChartDs(IvCo, IvW, IvH, IvTitle: string; IvDs: TDataset; IvXFld, IvYFld, IvTooltipFld: string): string;
+function THtmRec.ChartDs(IvCo, IvW, IvH, IvTitle: string; IvDs: TFDDataset; IvXFld, IvYFld, IvTooltipFld: string): string;
 var
   dt: TDateTime;
   da, ys, lb: string; // data
@@ -8760,10 +8858,11 @@ begin
   Result := Chart(IvCo, IvW, IvH, IvTitle, da);
 end;
 
-function THtmRec.ChartSql(var IvDbaCls: TDbaCls; IvCo, IvW, IvH, IvTitle: string; IvSql, IvXFld, IvYFld, IvTooltipFld: string; IvTimeOut: integer): string;
+function THtmRec.ChartSql(IvCo, IvW, IvH, IvTitle: string; IvSql, IvXFld, IvYFld, IvTooltipFld: string; IvTimeOut: integer): string;
 var
   k: string;
-  d: TDataset;
+  d: TFDDataset;
+  x: TDbaCls;
 begin
 
   {$REGION 'exit'}
@@ -8773,14 +8872,20 @@ begin
   end;
   {$ENDREGION}
 
-  {$REGION 'ds'}
-  if not IvDbaCls.DsFD(IvSql, d, k, true, IvTimeOut) then begin
-    Result := Panel(k);
-    Exit
-  end;
-  Result := ChartDs(IvCo, IvW, IvH, IvTitle, d, IvXFld, IvYFld, IvTooltipFld);
-  {$ENDREGION}
+  x := TDbaCls.Create(FDManager);
+  try
 
+    {$REGION 'ds'}
+    if not x.DsFD(IvSql, d, k, true, IvTimeOut) then begin
+      Result := Panel(k);
+      Exit
+    end;
+    Result := ChartDs(IvCo, IvW, IvH, IvTitle, d, IvXFld, IvYFld, IvTooltipFld);
+    {$ENDREGION}
+
+  finally
+
+  end;
 end;
   {$ENDREGION}
 
@@ -8937,7 +9042,7 @@ end;
   {$ENDREGION}
 
   {$REGION 'scripts'}
-function THtmRec.BootScript(var IvDbaCls: TDbaCls): string;
+function THtmRec.BootScript(): string;
 begin
     Result :=
                       sLineBreak + '<!-- BootScript -->'
@@ -9005,14 +9110,17 @@ begin
   Result := Format('<p class="w3-small w3-padding w3-opacity" style="text-align:center;">rendering time %s</p>', [s]);
 end;
 
-function THtmRec.DivPathInfoActions(IvWre: TWebRequest): string;
+function THtmRec.DivPathInfoActions(IvWm: TWebModule; IvWre: TWebRequest): string;
+var
+  i: integer;
 begin
-  Result := '<h3>Menu</h3><ul>'#13;
-//  for i := 0 to Actions.Count - 1 do
-//    Response.Content := Response.Content + '<li> <a href="' +
-//      Request.ScriptName + Action[I].PathInfo + '"> ' +
-//      Copy (Action[I].Name, 3, 1000) + '</a>'#13;
-//  Response.Content := Response.Content + '</ul>';
+  Result :=
+    sLineBreak + '<!-- PathInfos -->'
+  + sLineBreak + '<h3>PathInfo</h3>';
+  Result := Result + sLineBreak + '<ul>';
+  for i := 0 to IvWm.Actions.Count - 1 do
+    Result := Result + sLineBreak + '<li><a href="' + IvWre.ScriptName + IvWm.Action[I].PathInfo + '"> ' + IvWm.Action[I].Name + '</a></li>';
+  Result := Result +  sLineBreak + '</ul>';
 end;
 
 function THtmRec.DivNews(IvLastHour: integer): string;
@@ -9237,155 +9345,161 @@ end;
   {$ENDREGION}
 
   {$REGION 'report'}
-function THtmRec.Report(var IvDbaCls: TDbaCls; IvId: integer): string;
+function THtmRec.Report(IvId: integer): string;
 
   {$REGION 'var'}
 var
   xp, xd, xc: integer; // idx param, dataset, chart
   sq, co, c2, cl, sy, va, na, n2, ww, hh, ti, t2, se, k: string; // sql, coname, class, style, value, name, w, h, title, select
-  dr, dp, dd, dc: TDataset; // ds report, params, datasets, dataset-charts
+  dr, dp, dd, dc: TFDDataset; // ds report, params, datasets, dataset-charts
   rr, rp, rd, ra, rb: string; // result report, params, datasets, dstable, dscharts
   fx, fy, ft: string; // fldx, fldy, fldtooltip
   nn, vv, cc: string; // spare name, value, coname
+  x: TDbaCls;
   {$ENDREGION}
 
 begin
+  x := TDbaCls.Create(FDManager);
+  try
 
-  {$REGION 'dr rr report'}
-  sq := Format('select * from DbaReport.dbo.TblReport where FldState = ''Active'' and FldId = %d', [IvId]);
-  if not IvDbaCls.DsFD(sq, dr, k, true) then begin
-    Result := AlertW('Report', k);
-    Exit;
-  end;
-  {$ENDREGION}
-
-  {$REGION 'dp rp params'}
-  rp := '';
-  sq := Format('select * from DbaReport.dbo.TblParam where FldState = ''Active'' and FldReportId = %d order by FldOrder', [IvId]);
-  if not IvDbaCls.DsFD(sq, dp, k) then begin
-    rp := rp + AlertW('Params', k);
-  end else begin
-    rp := rp +         '<h4 style="cursor:pointer;" onclick="w3.toggleShow(''#CoFilter'')">Filters</h4>' // class="w3-button"
-        + sLineBreak + '<form id="CoFilter" class="w3-card w3-padding"' + iif.Str(dr.FieldByName('FldParamsClosed').AsBoolean, ' style="display:none;"', '') + ' action="' + '' + '" method="post">'; //  w3-container
-    xp := 0;
-    while not dp.Eof do begin
-      Inc(xp);
-      co := nam.Co(dp.FieldByName('FldParam').AsString);
-      va := wre.StrGet(co, dp.FieldByName('FldDefault').AsString);
-      rp := rp + sLineBreak + Input(
-        co                                                                                  // Co
-      , dp.FieldByName('FldKind').AsString                                                  // Kind
-      , iif.NxD(dp.FieldByName('FldCaption').AsString, dp.FieldByName('FldParam').AsString) // Label
-      , va                                                                                  // Value
-      , dp.FieldByName('FldPlaceholder').AsString                                           // Placeholder
-      , dp.FieldByName('FldClass').AsString                                                 // Class
-      , dp.FieldByName('FldStyle').AsString                                                 // Style
-      );
-      dp.Next;
+    {$REGION 'dr rr report'}
+    sq := Format('select * from DbaReport.dbo.TblReport where FldState = ''Active'' and FldId = %d', [IvId]);
+    if not x.DsFD(sq, dr, k, true) then begin
+      Result := AlertW('Report', k);
+      Exit;
     end;
-  end;
-  rp := rp + sLineBreak + '<br>' + Input('CoRefresh', 'Submit', '', 'Refresh', '', 'w3-btn w3-indigo');
-  rp := rp + sLineBreak + '<br></form>';
-  rp := rva.Rv(IvDbaCls, rp);
-  {$ENDREGION}
+    {$ENDREGION}
 
-  {$REGION 'dd rd=ra+rb dataset(s)+chart(s)'}
-  rd := '';
-  sq := Format('select * from DbaReport.dbo.TblDataset where FldState = ''Active'' and FldReportId = %d order by FldOrder', [IvId]);
-  if not IvDbaCls.DsFD(sq, dd, k) then begin
-    rd := rd + AlertW('Datasets', k);
-  end else begin
-    xd := 0; // ds
-    while not dd.Eof do begin
-
-      {$REGION 'ra dataset'}
-      ra := '';
-      Inc(xd);
-      na := dd.FieldByName('FldDataset').AsString;
-      ti := dd.FieldByName('FldTitle').AsString;
-      se := dd.FieldByName('FldSelect').AsString;
-      cl := dd.FieldByName('FldClass').AsString;
-      sy := dd.FieldByName('FldStyle').AsString;
-      co := nam.Co('Table' + xd.ToString);
-
-      // se compile
-      dp.First;
+    {$REGION 'dp rp params'}
+    rp := '';
+    sq := Format('select * from DbaReport.dbo.TblParam where FldState = ''Active'' and FldReportId = %d order by FldOrder', [IvId]);
+    if not x.DsFD(sq, dp, k) then begin
+      rp := rp + AlertW('Params', k);
+    end else begin
+      rp := rp +         '<h4 style="cursor:pointer;" onclick="w3.toggleShow(''#CoFilter'')">Filters</h4>' // class="w3-button"
+          + sLineBreak + '<form id="CoFilter" class="w3-card w3-padding"' + iif.Str(dr.FieldByName('FldParamsClosed').AsBoolean, ' style="display:none;"', '') + ' action="' + '' + '" method="post">'; //  w3-container
+      xp := 0;
       while not dp.Eof do begin
-        nn := dp.FieldByName('FldParam').AsString;
-        cc := nam.Co(nn);
-        vv := wre.StrGet(cc, dp.FieldByName('FldDefault').AsString);
-        se := stringreplace(se, '$'+nn+'$', vv, [rfReplaceAll]);
+        Inc(xp);
+        co := nam.Co(dp.FieldByName('FldParam').AsString);
+        va := wre.StrGet(co, dp.FieldByName('FldDefault').AsString);
+        rp := rp + sLineBreak + Input(
+          co                                                                                  // Co
+        , dp.FieldByName('FldKind').AsString                                                  // Kind
+        , iif.NxD(dp.FieldByName('FldCaption').AsString, dp.FieldByName('FldParam').AsString) // Label
+        , va                                                                                  // Value
+        , dp.FieldByName('FldPlaceholder').AsString                                           // Placeholder
+        , dp.FieldByName('FldClass').AsString                                                 // Class
+        , dp.FieldByName('FldStyle').AsString                                                 // Style
+        );
         dp.Next;
       end;
-      ra := ra {+ '<br>'} + TableSql(IvDbaCls, se, cl, sy, co, {ti}''); // title will be used as title of ds+charts card
-      {$ENDREGION}
-
-      {$REGION 'rb charts'}
-      rb := '';
-      sq := Format('select * from DbaReport.dbo.TblChart where FldState = ''Active'' and FldReportId = %d and FldDataset = ''%s'' order by FldOrder', [IvId, na]);
-      if not IvDbaCls.DsFD(sq, dc, k) then begin
-        rb := rb + AlertW('Charts', k);
-      end else begin
-        xc := 0; // chart
-        while not dc.Eof do begin
-          Inc(xc);
-          n2 := dc.FieldByName('FldChart').AsString;
-          t2 := dc.FieldByName('FldTitle').AsString;
-          ww := dc.FieldByName('FldWidth').AsString;
-          hh := dc.FieldByName('FldHeight').AsString;
-          fx := dc.FieldByName('FldXLabelAngleDeg').AsString;
-          fy := dc.FieldByName('FldYLabelAngleDeg').AsString;
-          ft := dc.FieldByName('FldDescription').AsString;
-        //cl := dc.FieldByName('FldClass').AsString;
-        //sy := dc.FieldByName('FldStyle').AsString;
-          c2 := nam.Co(Format('Dataset%dChart%d', [xd, xc]));
-          rb := rb {+ '<br>'} + '<div class="w3-center">' + ChartSql(IvDbaCls, c2, ww, hh, t2, se, fx, fy, ft) + '</div>';
-          dc.Next;
-        end;
-      end;
-      {$ENDREGION}
-
-      // chart(s) + table
-      co := nam.Co('Dataset' + xd.ToString);
-      rd := rd
-      + '<h4 style="cursor:pointer;" onclick="w3.toggleShow(''#' + co + ''')">' + ti + '</h4>' // class="w3-button"
-      + '<div' + iif.Str(dd.FieldByName('FldPanelOn').AsBoolean, ' class="w3-card w3-padding"', '') + ' id="' + co + '"' + iif.Str(dd.FieldByName('FldPanelClosed').AsBoolean, ' style="display:none;"', '') + '>'
-      + iif.ExA(rb, '<br>') + ra
-      + '</div>';
-
-      // next
-      dd.Next;
     end;
+    rp := rp + sLineBreak + '<br>' + Input('CoRefresh', 'Submit', '', 'Refresh', '', 'w3-btn w3-indigo');
+    rp := rp + sLineBreak + '<br></form>';
+    rp := rva.Rv(rp);
+    {$ENDREGION}
+
+    {$REGION 'dd rd=ra+rb dataset(s)+chart(s)'}
+    rd := '';
+    sq := Format('select * from DbaReport.dbo.TblDataset where FldState = ''Active'' and FldReportId = %d order by FldOrder', [IvId]);
+    if not x.DsFD(sq, dd, k) then begin
+      rd := rd + AlertW('Datasets', k);
+    end else begin
+      xd := 0; // ds
+      while not dd.Eof do begin
+
+        {$REGION 'ra dataset'}
+        ra := '';
+        Inc(xd);
+        na := dd.FieldByName('FldDataset').AsString;
+        ti := dd.FieldByName('FldTitle').AsString;
+        se := dd.FieldByName('FldSelect').AsString;
+        cl := dd.FieldByName('FldClass').AsString;
+        sy := dd.FieldByName('FldStyle').AsString;
+        co := nam.Co('Table' + xd.ToString);
+
+        // se compile
+        dp.First;
+        while not dp.Eof do begin
+          nn := dp.FieldByName('FldParam').AsString;
+          cc := nam.Co(nn);
+          vv := wre.StrGet(cc, dp.FieldByName('FldDefault').AsString);
+          se := stringreplace(se, '$'+nn+'$', vv, [rfReplaceAll]);
+          dp.Next;
+        end;
+        ra := ra {+ '<br>'} + TableSql(se, cl, sy, co, {ti}''); // title will be used as title of ds+charts card
+        {$ENDREGION}
+
+        {$REGION 'rb charts'}
+        rb := '';
+        sq := Format('select * from DbaReport.dbo.TblChart where FldState = ''Active'' and FldReportId = %d and FldDataset = ''%s'' order by FldOrder', [IvId, na]);
+        if not x.DsFD(sq, dc, k) then begin
+          rb := rb + AlertW('Charts', k);
+        end else begin
+          xc := 0; // chart
+          while not dc.Eof do begin
+            Inc(xc);
+            n2 := dc.FieldByName('FldChart').AsString;
+            t2 := dc.FieldByName('FldTitle').AsString;
+            ww := dc.FieldByName('FldWidth').AsString;
+            hh := dc.FieldByName('FldHeight').AsString;
+            fx := dc.FieldByName('FldXLabelAngleDeg').AsString;
+            fy := dc.FieldByName('FldYLabelAngleDeg').AsString;
+            ft := dc.FieldByName('FldDescription').AsString;
+          //cl := dc.FieldByName('FldClass').AsString;
+          //sy := dc.FieldByName('FldStyle').AsString;
+            c2 := nam.Co(Format('Dataset%dChart%d', [xd, xc]));
+            rb := rb {+ '<br>'} + '<div class="w3-center">' + ChartSql(c2, ww, hh, t2, se, fx, fy, ft) + '</div>';
+            dc.Next;
+          end;
+        end;
+        {$ENDREGION}
+
+        // chart(s) + table
+        co := nam.Co('Dataset' + xd.ToString);
+        rd := rd
+        + '<h4 style="cursor:pointer;" onclick="w3.toggleShow(''#' + co + ''')">' + ti + '</h4>' // class="w3-button"
+        + '<div' + iif.Str(dd.FieldByName('FldPanelOn').AsBoolean, ' class="w3-card w3-padding"', '') + ' id="' + co + '"' + iif.Str(dd.FieldByName('FldPanelClosed').AsBoolean, ' style="display:none;"', '') + '>'
+        + iif.ExA(rb, '<br>') + ra
+        + '</div>';
+
+        // next
+        dd.Next;
+      end;
+    end;
+    {$ENDREGION}
+
+    {$REGION 'report-assy'}
+    Result := '';
+
+    // add header
+    if not dr.FieldByName('FldContent').AsString.Contains('no-header') then
+      Result := Result + dr.FieldByName('FldHeader').AsString;
+
+    // add params rp
+    if not dr.FieldByName('FldContent').AsString.Contains('no-filter') then
+      Result := Result + rp;
+
+    // add datasets+charts rd
+    if not dr.FieldByName('FldContent').AsString.Contains('no-dataset') then // imply no-charts
+      Result := Result + rd;
+
+    // add footer
+    if not dr.FieldByName('FldContent').AsString.Contains('no-footer') then
+      Result := Result + dr.FieldByName('FldFooter').AsString;
+    {$ENDREGION}
+
+    {$REGION 'clean'}
+    dc.Free;
+    dd.Free;
+    dp.Free;
+    dr.Free;
+    {$ENDREGION}
+
+  finally
+    FreeAndNil(x);
   end;
-  {$ENDREGION}
-
-  {$REGION 'report-assy'}
-  Result := '';
-
-  // add header
-  if not dr.FieldByName('FldContent').AsString.Contains('no-header') then
-    Result := Result + dr.FieldByName('FldHeader').AsString;
-
-  // add params rp
-  if not dr.FieldByName('FldContent').AsString.Contains('no-filter') then
-    Result := Result + rp;
-
-  // add datasets+charts rd
-  if not dr.FieldByName('FldContent').AsString.Contains('no-dataset') then // imply no-charts
-    Result := Result + rd;
-
-  // add footer
-  if not dr.FieldByName('FldContent').AsString.Contains('no-footer') then
-    Result := Result + dr.FieldByName('FldFooter').AsString;
-  {$ENDREGION}
-
-  {$REGION 'clean'}
-  dc.Free;
-  dd.Free;
-  dp.Free;
-  dr.Free;
-  {$ENDREGION}
-
 end;
   {$ENDREGION}
 
@@ -9687,29 +9801,31 @@ end;
   *)
   {$ENDREGION}
 
-function TImgRec.DbaInit(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TImgRec.DbaInit(var IvFbk: string): boolean;
 begin
   raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
-function TImgRec.DbaInsert(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TImgRec.DbaInsert(var IvFbk: string): boolean;
 begin
   raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
-function TImgRec.DbaSelect(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TImgRec.DbaSelect(var IvFbk: string): boolean;
 begin
   raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
-procedure TImgRec.DbaToDisk(var IvDbaCls: TDbaCls; IvFile, IvTable, IvField, IvWhere: string);
+procedure TImgRec.DbaToDisk(IvFile, IvTable, IvField, IvWhere: string);
 var
   d, k: string;
   p: TPicture;
+  x: TDbaCls;
 begin
   p := TPicture.Create;
+  x := TDbaCls.Create(FDManager);
   try
-    if IvDbaCls.ImgPictureFromDba(p, IvTable, IvField, IvWhere, k) then begin
+    if x.ImgPictureFromDba(p, IvTable, IvField, IvWhere, k) then begin
       d := ExtractFileDir(IvFile);
       if not DirectoryExists(d) then
         if not ForceDirectories(d) then
@@ -9717,7 +9833,8 @@ begin
       p.SaveToFile(IvFile); // bmp.ToFile(p.Bitmap, IvFile, true, k);
     end;
   finally
-    p.Free;
+    FreeAndNil(x);
+    FreeAndNil(p);
   end;
 end;
 
@@ -10896,14 +11013,14 @@ end;
 {$ENDREGION}
 
 {$REGION 'TMbrRec'}
-function TMbrRec.BadgePath(var IvDbaCls: TDbaCls; IvMember: string): string;
+function TMbrRec.BadgePath(IvMember: string): string;
 var
   m: string;
 begin
   m := iif.NxD(IvMember, Member);
   Result := Format('%s\%s.png', [PathAlpha(m), m]);
   if not FileExists(Result) then
-    img.DbaToDisk(IvDbaCls, Result, 'DbaMember.dbo.TblMember', 'FldBadge', Format('FldMember = ''%s''', [m]));
+    img.DbaToDisk(Result, 'DbaMember.dbo.TblMember', 'FldBadge', Format('FldMember = ''%s''', [m]));
 //Result := '/WksImageIsapiProject.dll/Image?CoFrom=Member&CoName=' + IvMember;
 end;
 
@@ -11694,78 +11811,96 @@ begin
     Result := s + IvIdOrPathSwitch;
 end;
 
-function TObjRec.DbaExists(var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; var IvFbk: string): boolean;
+function TObjRec.DbaExists(IvObject, IvIdOrPath: string; var IvFbk: string): boolean;
 var
   i: integer;
   t, f, w, k: string; // tbl, fld, where
+  x: TDbaCls;
 begin
-  t := IvDbaCls.Tbl(IvObject, IvObject);
-  f := IvDbaCls.Fld(IvObject);
-  IvDbaCls.HIdFromIdOrPath(t, f, IvIdOrPath, i, k);
-  w := Format('FldId = %d', [i]);
-  Result := IvDbaCls.RecExists(t, w, k);
+  x := TDbaCls.Create(FDManager);
+  try
+    t := x.Tbl(IvObject, IvObject);
+    f := x.Fld(IvObject);
+    x.HIdFromIdOrPath(t, f, IvIdOrPath, i, k);
+    w := Format('FldId = %d', [i]);
+    Result := x.RecExists(t, w, k);
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
-function TObjRec.DbaContentGet(var IvDbaCls: TDbaCls; IvObject, IvIdOrPath, IvDefault: string): string; // *** use FldGet ***
+function TObjRec.DbaContentGet(IvObject, IvIdOrPath, IvDefault: string): string; // *** use FldGet ***
 var
   t, f, q, c, k: string; // tbl, fld, sql, content
   i: integer;
+  x: TDbaCls;
 begin
-  t := IvDbaCls.Tbl(IvObject, IvObject);
-  f := IvDbaCls.Fld(IvObject);
-  i := IvDbaCls.HIdFromIdOrPath(t, f, IvIdOrPath);
-  q := Format('select FldContent from %s where FldId = %d', [t, i]);
-  c := IvDbaCls.ScalarFD(q, IvDefault, k);
-  c := str.CommentRemove(c);
-  c := str.EmptyLinesRemove(c);
-  c := rva.Rv(IvDbaCls, c, true); // encapsulate Rv, CommentRemuve, etc. in a sys.Compile o similar
-  Result := iif.NxD(c, IvDefault);
+  x := TDbaCls.Create(FDManager);
+  try
+    t := x.Tbl(IvObject, IvObject);
+    f := x.Fld(IvObject);
+    i := x.HIdFromIdOrPath(t, f, IvIdOrPath);
+    q := Format('select FldContent from %s where FldId = %d', [t, i]);
+    c := x.ScalarFD(q, IvDefault, k);
+    c := str.CommentRemove(c);
+    c := str.EmptyLinesRemove(c);
+    c := rva.Rv(c, true); // encapsulate Rv, CommentRemuve, etc. in a sys.Compile o similar
+    Result := iif.NxD(c, IvDefault);
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
-function TObjRec.DbaContentSet(var IvDbaCls: TDbaCls; IvObject, IvIdOrPath, IvValue: string): boolean;
+function TObjRec.DbaContentSet(IvObject, IvIdOrPath, IvValue: string): boolean;
 var
   t, f, v, q, k: string; // tbl, fld, value, sql
   i, z: integer;
+  x: TDbaCls;
 begin
-  t := IvDbaCls.Tbl(IvObject, IvObject);
-  f := IvDbaCls.Fld(IvObject);
-  i := IvDbaCls.HIdFromIdOrPath(t, f, IvIdOrPath);
-  v := sql.Val(IvValue);
-  q := Format('update %s set FldContent = %s where FldId = %d', [t, v, i]);
-  Result := IvDbaCls.ExecFD(q, z, k); // *** WARNING might delete comments ***
+  x := TDbaCls.Create(FDManager);
+  try
+    t := x.Tbl(IvObject, IvObject);
+    f := x.Fld(IvObject);
+    i := x.HIdFromIdOrPath(t, f, IvIdOrPath);
+    v := sql.Val(IvValue);
+    q := Format('update %s set FldContent = %s where FldId = %d', [t, v, i]);
+    Result := x.ExecFD(q, z, k); // *** WARNING might delete comments ***
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
-function TObjRec.DbaParamGet(var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; IvDefault: string): string;
+function TObjRec.DbaParamGet(IvObject, IvIdOrPath: string; IvDefault: string): string;
 var
   x: string; // idorpath
 begin
   x := IdOrPathParamEnsure(IvObject, IvIdOrPath);
-  Result := DbaContentGet(IvDbaCls, IvObject, x, IvDefault);
+  Result := DbaContentGet(IvObject, x, IvDefault);
 end;
 
-function TObjRec.DbaParamSet(var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; IvValue: string): boolean;
+function TObjRec.DbaParamSet(IvObject, IvIdOrPath: string; IvValue: string): boolean;
 var
   x: string; // idorpath
 begin
   x := IdOrPathParamEnsure(IvObject, IvIdOrPath);
-  Result := DbaContentSet(IvDbaCls, IvObject, x, IvValue);
+  Result := DbaContentSet(IvObject, x, IvValue);
 end;
 
-function TObjRec.DbaSwitchGet(var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; IvDefault: boolean): boolean;
+function TObjRec.DbaSwitchGet(IvObject, IvIdOrPath: string; IvDefault: boolean): boolean;
 var
   x, c: string; // idorpath, content
 begin
   x := IdOrPathSwitchEnsure(IvObject, IvIdOrPath);
-  c := DbaContentGet(IvDbaCls, IvObject, x, BoolToStr(IvDefault));
+  c := DbaContentGet(IvObject, x, BoolToStr(IvDefault));
   Result := StrToBoolDef(c, IvDefault);
 end;
 
-function TObjRec.DbaSwitchSet(var IvDbaCls: TDbaCls; IvObject, IvIdOrPath: string; IvValue: boolean): boolean;
+function TObjRec.DbaSwitchSet(IvObject, IvIdOrPath: string; IvValue: boolean): boolean;
 var
   x: string; // idorpath
 begin
   x := IdOrPathSwitchEnsure(IvObject, IvIdOrPath);
-  Result := DbaContentSet(IvDbaCls, IvObject, x, BoolToStr(IvValue));
+  Result := DbaContentSet(IvObject, x, BoolToStr(IvValue));
 end;
 
 function TObjRec.RioExists(IvObject, IvIdOrPath: string; var IvFbk: string): boolean;
@@ -11830,6 +11965,30 @@ begin
 end;
 {$ENDREGION}
 
+{$REGION 'TOpsRec'}
+function TOpsRec.ProcessIdGet: cardinal; register; assembler;
+{$IFDEF 32BIT}
+asm
+  mov eax, FS:[$20]
+end;
+{$ELSE}
+begin
+  Result := Winapi.Windows.GetCurrentProcessId;
+end;
+{$ENDIF}
+
+function TOpsRec.ThreadIdGet: cardinal; register; assembler;
+{$IFDEF 32BIT}
+asm
+  mov eax, FS:[$24]
+end;
+{$ELSE}
+begin
+  Result := Winapi.Windows.GetCurrentThreadID;
+end;
+{$ENDIF}
+{$ENDREGION}
+
 {$REGION 'TOrgRec'}
 function TOrgRec.AlphaPath(IvSep: char): string;
 begin
@@ -11851,205 +12010,223 @@ begin
   Result := Format('%s/%sCss.css', [HomeUrl, Organization]);
 end;
 
-function TOrgRec.DbaInit(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TOrgRec.DbaInit(var IvFbk: string): boolean;
 var
   q: string;
+  x: TDbaCls;
 begin
+  x := TDbaCls.Create(FDManager);
+  try
 
-  {$REGION 'DbaOrganization'}
-  IvDbaCls.DbaCreateIfNotExists('DbaOrganization', IvFbk);
-  {$ENDREGION}
+    {$REGION 'DbaOrganization'}
+    x.DbaCreateIfNotExists('DbaOrganization', IvFbk);
+    {$ENDREGION}
 
-  {$REGION 'TblOrganization'}
-  q := ''
-    + sLineBreak + '   FldId                 integer      NOT NULL' // Id
-    + sLineBreak + ' , FldPId                integer      NOT NULL' // PId
-    + sLineBreak + ' , FldOrganization       varchar(32)  NOT NULL' // Organization
-    + sLineBreak + ' , FldState              varchar(16)      NULL' // State
-    + sLineBreak + ' , FldWww                varchar(128)     NULL' // Www
-    + sLineBreak + ' , FldExpire             datetime         NULL' // Expire
-    + sLineBreak + ' , FldOwner              varchar(32)      NULL' // Owner
-    + sLineBreak + ' , FldSlogan             varchar(32)      NULL' // Slogan
-    + sLineBreak + ' , FldAbout              varchar(max)     NULL' // About
-    + sLineBreak + ' , FldPhone              varchar(32)      NULL' // Phone
-    + sLineBreak + ' , FldFax                varchar(32)      NULL' // Fax
-    + sLineBreak + ' , FldEmail              varchar(32)      NULL' // Email
-    + sLineBreak + ' , FldAddress            varchar(64)      NULL' // Address
-    + sLineBreak + ' , FldZipCode            varchar(8)       NULL' // ZipCode
-    + sLineBreak + ' , FldCity               varchar(64)      NULL' // City
-    + sLineBreak + ' , FldProvince           varchar(16)      NULL' // Province
-    + sLineBreak + ' , FldCountry            varchar(16)      NULL' // Country
-    + sLineBreak + ' , FldSsn                varchar(32)      NULL' // Ssn
-    + sLineBreak + ' , FldVatNumber          varchar(16)      NULL' // VatNumber
-    + sLineBreak + ' , FldLegalName          varchar(64)      NULL' // LegalName
-    + sLineBreak + ' , FldSymbol             varchar(32)      NULL' // Symbol
-    + sLineBreak + ' , FldApiKey             varchar(128)     NULL' // ApiKey
-    + sLineBreak + ' , FldNetwork            varchar(max)     NULL' // Network
-    + sLineBreak + ' , FldPageFooter         varchar(max)     NULL' // PageFooter
-    + sLineBreak + ' , FldEmailTemplate      varchar(max)     NULL' // EmailTemplate
-    + sLineBreak + ' , FldCss                varchar(max)     NULL' // Css
-    + sLineBreak + ' , FldLogo               image            NULL' // Logo
-    + sLineBreak + ' , FldLogoInv            image            NULL' // LogoInv
-    + sLineBreak + ' , FldBgColor            varchar(16)      NULL' // BgColor
-    + sLineBreak + ' , FldFgColor            varchar(16)      NULL' // FgColor
-    + sLineBreak + ' , FldBorderColor        varchar(16)      NULL' // BorderColor
-    + sLineBreak + ' , FldColor              varchar(16)      NULL' // Color
-    + sLineBreak + ' , FldColor2             varchar(16)      NULL' // Color2
-    + sLineBreak + ' , FldInfoColor          varchar(16)      NULL' // InfoColor
-    + sLineBreak + ' , FldSuccessColor       varchar(16)      NULL' // SuccessColor
-    + sLineBreak + ' , FldWarningColor       varchar(16)      NULL' // WarningColor
-    + sLineBreak + ' , FldDangerColor        varchar(16)      NULL' // DangerColor
-    + sLineBreak + ' , FldJson               varchar(max)     NULL' // Json
-    + sLineBreak + ' , FldPageSwitch         varchar(512)     NULL' // PageSwitch
-    + sLineBreak + ' , FldContentSwitch      varchar(512)     NULL' // ContentSwitch
-  ;
-  if IvDbaCls.TblCreateIfNotExists('DbaOrganization', 'TblOrganization', q, IvFbk) then begin
-  //DbaCls.RecDefaultInsert('DbaOrganization.dbo.TblOrganization', IvFbk);
-  //DbaCls.RecTestInsert('DbaOrganization.dbo.TblOrganization', ['FldOrganization'], ['Wks'], IvFbk);
+    {$REGION 'TblOrganization'}
+    q := ''
+      + sLineBreak + '   FldId                 integer      NOT NULL' // Id
+      + sLineBreak + ' , FldPId                integer      NOT NULL' // PId
+      + sLineBreak + ' , FldOrganization       varchar(32)  NOT NULL' // Organization
+      + sLineBreak + ' , FldState              varchar(16)      NULL' // State
+      + sLineBreak + ' , FldWww                varchar(128)     NULL' // Www
+      + sLineBreak + ' , FldExpire             datetime         NULL' // Expire
+      + sLineBreak + ' , FldOwner              varchar(32)      NULL' // Owner
+      + sLineBreak + ' , FldSlogan             varchar(32)      NULL' // Slogan
+      + sLineBreak + ' , FldAbout              varchar(max)     NULL' // About
+      + sLineBreak + ' , FldPhone              varchar(32)      NULL' // Phone
+      + sLineBreak + ' , FldFax                varchar(32)      NULL' // Fax
+      + sLineBreak + ' , FldEmail              varchar(32)      NULL' // Email
+      + sLineBreak + ' , FldAddress            varchar(64)      NULL' // Address
+      + sLineBreak + ' , FldZipCode            varchar(8)       NULL' // ZipCode
+      + sLineBreak + ' , FldCity               varchar(64)      NULL' // City
+      + sLineBreak + ' , FldProvince           varchar(16)      NULL' // Province
+      + sLineBreak + ' , FldCountry            varchar(16)      NULL' // Country
+      + sLineBreak + ' , FldSsn                varchar(32)      NULL' // Ssn
+      + sLineBreak + ' , FldVatNumber          varchar(16)      NULL' // VatNumber
+      + sLineBreak + ' , FldLegalName          varchar(64)      NULL' // LegalName
+      + sLineBreak + ' , FldSymbol             varchar(32)      NULL' // Symbol
+      + sLineBreak + ' , FldApiKey             varchar(128)     NULL' // ApiKey
+      + sLineBreak + ' , FldNetwork            varchar(max)     NULL' // Network
+      + sLineBreak + ' , FldPageFooter         varchar(max)     NULL' // PageFooter
+      + sLineBreak + ' , FldEmailTemplate      varchar(max)     NULL' // EmailTemplate
+      + sLineBreak + ' , FldCss                varchar(max)     NULL' // Css
+      + sLineBreak + ' , FldLogo               image            NULL' // Logo
+      + sLineBreak + ' , FldLogoInv            image            NULL' // LogoInv
+      + sLineBreak + ' , FldBgColor            varchar(16)      NULL' // BgColor
+      + sLineBreak + ' , FldFgColor            varchar(16)      NULL' // FgColor
+      + sLineBreak + ' , FldBorderColor        varchar(16)      NULL' // BorderColor
+      + sLineBreak + ' , FldColor              varchar(16)      NULL' // Color
+      + sLineBreak + ' , FldColor2             varchar(16)      NULL' // Color2
+      + sLineBreak + ' , FldInfoColor          varchar(16)      NULL' // InfoColor
+      + sLineBreak + ' , FldSuccessColor       varchar(16)      NULL' // SuccessColor
+      + sLineBreak + ' , FldWarningColor       varchar(16)      NULL' // WarningColor
+      + sLineBreak + ' , FldDangerColor        varchar(16)      NULL' // DangerColor
+      + sLineBreak + ' , FldJson               varchar(max)     NULL' // Json
+      + sLineBreak + ' , FldPageSwitch         varchar(512)     NULL' // PageSwitch
+      + sLineBreak + ' , FldContentSwitch      varchar(512)     NULL' // ContentSwitch
+    ;
+    if x.TblCreateIfNotExists('DbaOrganization', 'TblOrganization', q, IvFbk) then begin
+    //DbaCls.RecDefaultInsert('DbaOrganization.dbo.TblOrganization', IvFbk);
+    //DbaCls.RecTestInsert('DbaOrganization.dbo.TblOrganization', ['FldOrganization'], ['Wks'], IvFbk);
+    end;
+    {$ENDREGION}
+
+    {$REGION 'End'}
+    IvFbk := 'Organization database initialized';
+    Result := true;
+    {$ENDREGION}
+
+  finally
+    FreeAndNil(x);
   end;
-  {$ENDREGION}
-
-  {$REGION 'End'}
-  IvFbk := 'Organization database initialized';
-  Result := true;
-  {$ENDREGION}
-
 end;
 
-function TOrgRec.DbaInsert(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TOrgRec.DbaInsert(var IvFbk: string): boolean;
 var
   q, k: string;
   z: integer;
+  x: TDbaCls;
 begin
+  x := TDbaCls.Create(FDManager);
+  try
 
-  {$REGION 'Insert'}
-  Id := IvDbaCls.TblIdNext('DbaOrganization.dbo.TblOrganization');
-  PId := ROOT_NEW_ID;
-  q :=           'insert into DbaOrganization.dbo.TblOrganization'
-  + sLineBreak + 'select'
-  + sLineBreak + '    ' + sql.Val(Id)                         // Id
-  + sLineBreak + '  , ' + sql.Val(PId)                        // PId
-  + sLineBreak + '  , ' + sql.Val(Organization)               // Organization
-  + sLineBreak + '  , ' + sql.Val(sta.Active.Key)             // State
-  + sLineBreak + '  , ' + sql.Val(Www)                        // Www
-  + sLineBreak + '  , ' + sql.Val(EndOfTheYear(Now))          // Expire
-  + sLineBreak + '  , ' + sql.Val('')                         // Owner
-  + sLineBreak + '  , ' + sql.Val('')                         // Slogan
-  + sLineBreak + '  , ' + sql.Val('[RvOrganization()] is...') // About
-  + sLineBreak + '  , ' + sql.Val('')                         // Phone
-  + sLineBreak + '  , ' + sql.Val('')                         // Fax
-  + sLineBreak + '  , ' + sql.Val('')                         // Email
-  + sLineBreak + '  , ' + sql.Val('')                         // Address
-  + sLineBreak + '  , ' + sql.Val('')                         // ZipCode
-  + sLineBreak + '  , ' + sql.Val('')                         // City
-  + sLineBreak + '  , ' + sql.Val('')                         // Province
-  + sLineBreak + '  , ' + sql.Val('')                         // Country
-  + sLineBreak + '  , ' + sql.Val('')                         // Ssn
-  + sLineBreak + '  , ' + sql.Val('')                         // VatNumber
-  + sLineBreak + '  , ' + sql.Val('')                         // LegalName
-  + sLineBreak + '  , ' + sql.Val('')                         // Symbol
-  + sLineBreak + '  , ' + sql.Val('')                         // ApiKey
-  + sLineBreak + '  , ' + sql.Val('')                         // Network
-  + sLineBreak + '  , ' + sql.Val('')                         // PageFooter
-  + sLineBreak + '  , ' + sql.Val('')                         // EmailTemplate
-  + sLineBreak + '  , ' + sql.Val('')                         // Css
-  + sLineBreak + '  , ' + sql.Val('')                         // Logo
-  + sLineBreak + '  , ' + sql.Val('')                         // LogoInv
-  + sLineBreak + '  , ' + sql.Val('')                         // BgColor
-  + sLineBreak + '  , ' + sql.Val('')                         // FgColor
-  + sLineBreak + '  , ' + sql.Val('')                         // BorderColor
-  + sLineBreak + '  , ' + sql.Val('')                         // Color
-  + sLineBreak + '  , ' + sql.Val('')                         // Color2
-  + sLineBreak + '  , ' + sql.Val('')                         // InfoColor
-  + sLineBreak + '  , ' + sql.Val('')                         // SuccessColor
-  + sLineBreak + '  , ' + sql.Val('')                         // WarningColor
-  + sLineBreak + '  , ' + sql.Val('')                         // DangerColor
-  + sLineBreak + '  , ' + sql.Val('')                         // Json
-  + sLineBreak + '  , ' + sql.Val('')                         // PageSwitch
-  + sLineBreak + '  , ' + sql.Val('')                         // ContentSwitch
-  ;
-  Result := IvDbaCls.ExecFD(q, z, k);
-  if not Result then begin
-    IvFbk := k;
-  end else
-    IvFbk := Format('Organization %s record inserted', [Organization]);
-  {$ENDREGION}
+    {$REGION 'Insert'}
+    Id := x.TblIdNext('DbaOrganization.dbo.TblOrganization');
+    PId := ROOT_NEW_ID;
+    q :=           'insert into DbaOrganization.dbo.TblOrganization'
+    + sLineBreak + 'select'
+    + sLineBreak + '    ' + sql.Val(Id)                         // Id
+    + sLineBreak + '  , ' + sql.Val(PId)                        // PId
+    + sLineBreak + '  , ' + sql.Val(Organization)               // Organization
+    + sLineBreak + '  , ' + sql.Val(sta.Active.Key)             // State
+    + sLineBreak + '  , ' + sql.Val(Www)                        // Www
+    + sLineBreak + '  , ' + sql.Val(EndOfTheYear(Now))          // Expire
+    + sLineBreak + '  , ' + sql.Val('')                         // Owner
+    + sLineBreak + '  , ' + sql.Val('')                         // Slogan
+    + sLineBreak + '  , ' + sql.Val('[RvOrganization()] is...') // About
+    + sLineBreak + '  , ' + sql.Val('')                         // Phone
+    + sLineBreak + '  , ' + sql.Val('')                         // Fax
+    + sLineBreak + '  , ' + sql.Val('')                         // Email
+    + sLineBreak + '  , ' + sql.Val('')                         // Address
+    + sLineBreak + '  , ' + sql.Val('')                         // ZipCode
+    + sLineBreak + '  , ' + sql.Val('')                         // City
+    + sLineBreak + '  , ' + sql.Val('')                         // Province
+    + sLineBreak + '  , ' + sql.Val('')                         // Country
+    + sLineBreak + '  , ' + sql.Val('')                         // Ssn
+    + sLineBreak + '  , ' + sql.Val('')                         // VatNumber
+    + sLineBreak + '  , ' + sql.Val('')                         // LegalName
+    + sLineBreak + '  , ' + sql.Val('')                         // Symbol
+    + sLineBreak + '  , ' + sql.Val('')                         // ApiKey
+    + sLineBreak + '  , ' + sql.Val('')                         // Network
+    + sLineBreak + '  , ' + sql.Val('')                         // PageFooter
+    + sLineBreak + '  , ' + sql.Val('')                         // EmailTemplate
+    + sLineBreak + '  , ' + sql.Val('')                         // Css
+    + sLineBreak + '  , ' + sql.Val('')                         // Logo
+    + sLineBreak + '  , ' + sql.Val('')                         // LogoInv
+    + sLineBreak + '  , ' + sql.Val('')                         // BgColor
+    + sLineBreak + '  , ' + sql.Val('')                         // FgColor
+    + sLineBreak + '  , ' + sql.Val('')                         // BorderColor
+    + sLineBreak + '  , ' + sql.Val('')                         // Color
+    + sLineBreak + '  , ' + sql.Val('')                         // Color2
+    + sLineBreak + '  , ' + sql.Val('')                         // InfoColor
+    + sLineBreak + '  , ' + sql.Val('')                         // SuccessColor
+    + sLineBreak + '  , ' + sql.Val('')                         // WarningColor
+    + sLineBreak + '  , ' + sql.Val('')                         // DangerColor
+    + sLineBreak + '  , ' + sql.Val('')                         // Json
+    + sLineBreak + '  , ' + sql.Val('')                         // PageSwitch
+    + sLineBreak + '  , ' + sql.Val('')                         // ContentSwitch
+    ;
+    Result := x.ExecFD(q, z, k);
+    if not Result then begin
+      IvFbk := k;
+    end else
+      IvFbk := Format('Organization %s record inserted', [Organization]);
+    {$ENDREGION}
 
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
-function TOrgRec.DbaSelect(var IvDbaCls: TDbaCls; const IvOrganization: string; var IvFbk: string): boolean;
+function TOrgRec.DbaSelect(const IvOrganization: string; var IvFbk: string): boolean;
 var
   d: TFDDataSet;
   q: string;
+  x: TDbaCls;
 begin
-
-  // key
-  Organization := IvOrganization;
-
-  {$REGION 'Insert'}
-  if not IvDbaCls.RecExists('DbaOrganization.dbo.TblOrganization', 'FldOrganization', Organization, IvFbk) then begin
-  //ods('Organization record does not exists, create it now');
-    PId := ROOT_NEW_ID;
-    DbaInsert(IvDbaCls, IvFbk);
-  end;
-  {$ENDREGION}
-
-  {$REGION 'Select'}
+  x := TDbaCls.Create(FDManager);
   try
-    q := Format('select * from DbaOrganization.dbo.TblOrganization where FldOrganization = ''%s''', [Organization]);
-    Result := IvDbaCls.DsFD(q, d, IvFbk);
-    Id             := d.FieldByName('FldId'           ).AsInteger ;              // Id
-    PId            := d.FieldByName('FldPId'          ).AsInteger ;              // PId
-    Organization   := d.FieldByName('FldOrganization' ).AsString  ;              // Organization
-    State          := d.FieldByName('FldState'        ).AsString  ;              // State
-    Www            := d.FieldByName('FldWww'          ).AsString  ;              // Www
-    Expire         := d.FieldByName('FldExpire'       ).AsDateTime;              // Expire
-    Owner          := d.FieldByName('FldOwner'        ).AsString  ;              // Owner
-    Slogan         := d.FieldByName('FldSlogan'       ).AsString  ;              // Slogan
-    About          := d.FieldByName('FldAbout'        ).AsString  ;              // About
-    Phone          := d.FieldByName('FldPhone'        ).AsString  ;              // Phone
-    Fax            := d.FieldByName('FldFax'          ).AsString  ;              // Fax
-    Email          := d.FieldByName('FldEmail'        ).AsString  ;              // Email
-    Address        := d.FieldByName('FldAddress'      ).AsString  ;              // Address
-    ZipCode        := d.FieldByName('FldZipCode'      ).AsString  ;              // ZipCode
-    City           := d.FieldByName('FldCity'         ).AsString  ;              // City
-    Province       := d.FieldByName('FldProvince'     ).AsString  ;              // Province
-    Country        := d.FieldByName('FldCountry'      ).AsString  ;              // Country
-    Ssn            := d.FieldByName('FldSsn'          ).AsString  ;              // Ssn
-    VatNumber      := d.FieldByName('FldVatNumber'    ).AsString  ;              // VatNumber
-    LegalName      := d.FieldByName('FldLegalName'    ).AsString  ;              // LegalName
-    Symbol         := d.FieldByName('FldSymbol'       ).AsString  ;              // Symbol
-    ApiKey         := d.FieldByName('FldApiKey'       ).AsString  ;              // ApiKey
-    Network        := d.FieldByName('FldNetwork'      ).AsString  ;              // Network
-    PageFooter     := d.FieldByName('FldPageFooter'   ).AsString  ;              // PageFooter
-    EmailTemplate  := d.FieldByName('FldEmailTemplate').AsString  ;              // EmailTemplate
-    Css            := d.FieldByName('FldCss'          ).AsString  ;              // Css
-  //BlobFieldToBitmap(d.FieldByName('FldLogo'         ) as TBlobField, Logo   ); // Logo
-  //BlobFieldToBitmap(d.FieldByName('FldLogoInv'      ) as TBlobField, LogoInv); // LogoInv
-    BgColor        := d.FieldByName('FldBgColor'      ).AsString  ;              // BgColor
-    FgColor        := d.FieldByName('FldFgColor'      ).AsString  ;              // FgColor
-    BorderColor    := d.FieldByName('FldBorderColor'  ).AsString  ;              // BorderColor
-    Color          := d.FieldByName('FldColor'        ).AsString  ;              // Color
-    Color2         := d.FieldByName('FldColor2'       ).AsString  ;              // Color2
-    InfoColor      := d.FieldByName('FldInfoColor'    ).AsString  ;              // InfoColor
-    SuccessColor   := d.FieldByName('FldSuccessColor' ).AsString  ;              // SuccessColor
-    WarningColor   := d.FieldByName('FldWarningColor' ).AsString  ;              // WarningColor
-    DangerColor    := d.FieldByName('FldDangerColor'  ).AsString  ;              // DangerColor
-    Json           := d.FieldByName('FldJson'         ).AsString  ;              // Json
-    PageSwitch     := d.FieldByName('FldPageSwitch'   ).AsString  ;              // HPageSwitch
-    ContentSwitch  := d.FieldByName('FldContentSwitch').AsString  ;              // HContentSwitch
-  //if iis.Nx(PageSwitch)    then PageSwitch    := sys.PAGE_SWITCH_DEFAULT;
-  //if iis.Nx(ContentSwitch) then ContentSwitch := sys.CONTENT_SWITCH_DEFAULT;
+
+    // key
+    Organization := IvOrganization;
+
+    {$REGION 'Insert'}
+    if not x.RecExists('DbaOrganization.dbo.TblOrganization', 'FldOrganization', Organization, IvFbk) then begin
+    //ods('Organization record does not exists, create it now');
+      PId := ROOT_NEW_ID;
+      DbaInsert(IvFbk);
+    end;
+    {$ENDREGION}
+
+    {$REGION 'Select'}
+    try
+      q := Format('select * from DbaOrganization.dbo.TblOrganization where FldOrganization = ''%s''', [Organization]);
+      Result := x.DsFD(q, d, IvFbk);
+      Id             := d.FieldByName('FldId'           ).AsInteger ;              // Id
+      PId            := d.FieldByName('FldPId'          ).AsInteger ;              // PId
+      Organization   := d.FieldByName('FldOrganization' ).AsString  ;              // Organization
+      State          := d.FieldByName('FldState'        ).AsString  ;              // State
+      Www            := d.FieldByName('FldWww'          ).AsString  ;              // Www
+      Expire         := d.FieldByName('FldExpire'       ).AsDateTime;              // Expire
+      Owner          := d.FieldByName('FldOwner'        ).AsString  ;              // Owner
+      Slogan         := d.FieldByName('FldSlogan'       ).AsString  ;              // Slogan
+      About          := d.FieldByName('FldAbout'        ).AsString  ;              // About
+      Phone          := d.FieldByName('FldPhone'        ).AsString  ;              // Phone
+      Fax            := d.FieldByName('FldFax'          ).AsString  ;              // Fax
+      Email          := d.FieldByName('FldEmail'        ).AsString  ;              // Email
+      Address        := d.FieldByName('FldAddress'      ).AsString  ;              // Address
+      ZipCode        := d.FieldByName('FldZipCode'      ).AsString  ;              // ZipCode
+      City           := d.FieldByName('FldCity'         ).AsString  ;              // City
+      Province       := d.FieldByName('FldProvince'     ).AsString  ;              // Province
+      Country        := d.FieldByName('FldCountry'      ).AsString  ;              // Country
+      Ssn            := d.FieldByName('FldSsn'          ).AsString  ;              // Ssn
+      VatNumber      := d.FieldByName('FldVatNumber'    ).AsString  ;              // VatNumber
+      LegalName      := d.FieldByName('FldLegalName'    ).AsString  ;              // LegalName
+      Symbol         := d.FieldByName('FldSymbol'       ).AsString  ;              // Symbol
+      ApiKey         := d.FieldByName('FldApiKey'       ).AsString  ;              // ApiKey
+      Network        := d.FieldByName('FldNetwork'      ).AsString  ;              // Network
+      PageFooter     := d.FieldByName('FldPageFooter'   ).AsString  ;              // PageFooter
+      EmailTemplate  := d.FieldByName('FldEmailTemplate').AsString  ;              // EmailTemplate
+      Css            := d.FieldByName('FldCss'          ).AsString  ;              // Css
+    //BlobFieldToBitmap(d.FieldByName('FldLogo'         ) as TBlobField, Logo   ); // Logo
+    //BlobFieldToBitmap(d.FieldByName('FldLogoInv'      ) as TBlobField, LogoInv); // LogoInv
+      BgColor        := d.FieldByName('FldBgColor'      ).AsString  ;              // BgColor
+      FgColor        := d.FieldByName('FldFgColor'      ).AsString  ;              // FgColor
+      BorderColor    := d.FieldByName('FldBorderColor'  ).AsString  ;              // BorderColor
+      Color          := d.FieldByName('FldColor'        ).AsString  ;              // Color
+      Color2         := d.FieldByName('FldColor2'       ).AsString  ;              // Color2
+      InfoColor      := d.FieldByName('FldInfoColor'    ).AsString  ;              // InfoColor
+      SuccessColor   := d.FieldByName('FldSuccessColor' ).AsString  ;              // SuccessColor
+      WarningColor   := d.FieldByName('FldWarningColor' ).AsString  ;              // WarningColor
+      DangerColor    := d.FieldByName('FldDangerColor'  ).AsString  ;              // DangerColor
+      Json           := d.FieldByName('FldJson'         ).AsString  ;              // Json
+      PageSwitch     := d.FieldByName('FldPageSwitch'   ).AsString  ;              // HPageSwitch
+      ContentSwitch  := d.FieldByName('FldContentSwitch').AsString  ;              // HContentSwitch
+    //if iis.Nx(PageSwitch)    then PageSwitch    := sys.PAGE_SWITCH_DEFAULT;
+    //if iis.Nx(ContentSwitch) then ContentSwitch := sys.CONTENT_SWITCH_DEFAULT;
+    finally
+      d.Free;
+    end;
+    {$ENDREGION}
+
+    {$REGION 'End'}
+    IvFbk := Format('Organization %s record selected', [Organization]);
+    Result := true;
+    {$ENDREGION}
+
   finally
-    d.Free;
+    FreeAndNil(x);
   end;
-  {$ENDREGION}
-
-  {$REGION 'End'}
-  IvFbk := Format('Organization %s record selected', [Organization]);
-  Result := true;
-  {$ENDREGION}
-
 end;
 
 function TOrgRec.DiskPath: string;
@@ -12302,11 +12479,47 @@ end;
 {$ENDREGION}
 
 {$REGION 'TPerRec'}
-function TPerRec.DbaSelect(var IvDbaCls: TDbaCls; var IvFbk: string; IvInsertIfNotExist: boolean): boolean;
+function TPerRec.DbaSelect(var IvFbk: string; IvInsertIfNotExist: boolean): boolean;
 var
   q: string;
   d: TFDDataSet;
+  x: TDbaCls;
 begin
+  x := TDbaCls.Create(FDManager);
+  try
+    try
+
+      {$REGION 'Dba'}
+    //q := 'select * from DbaPerson.dbo.TblPerson where FldPerson = ''' + Person + '''';
+      q :=           'select p.FldId, -1 as FldPId, u.FldUsername as FldPerson, FldName, FldSurname, FldEmail'
+      + sLineBreak + 'from DbaPerson.dbo.TblPerson p inner join'
+      + sLineBreak + '     DbaUser.dbo.TblUser u on (u.FldId = p.FldId)'
+      + sLineBreak + 'where u.FldUsername = ''' + Person + '''';
+      Result := x.DsFD(q, d, IvFbk);
+      try
+        Id           := d.FieldByName('FldId'         ).AsInteger;
+        PId          := d.FieldByName('FldPId'        ).AsInteger;
+        Person       := d.FieldByName('FldPerson'     ).AsString;
+        Name         := d.FieldByName('FldName'       ).AsString;
+        Surname      := d.FieldByName('FldSurname'    ).AsString;
+        Email        := d.FieldByName('FldEmail'      ).AsString;
+      finally
+        FreeAndNil(d);
+      end;
+      {$ENDREGION}
+
+      IvFbk  := 'Person selected';
+      Result := true;
+
+    except
+      on e: Exception do begin
+        IvFbk  := str.E(e);
+        Result := false;
+      end;
+    end;
+  finally
+    FreeAndNil(x);
+  end;
 
   {$REGION 'InsertIfNotExist'}
 //  if IvInsertIfNotExist then
@@ -12322,36 +12535,6 @@ begin
     Exit;
   {$ENDREGION}
 
-  try
-
-    {$REGION 'Dba'}
-  //q := 'select * from DbaPerson.dbo.TblPerson where FldPerson = ''' + Person + '''';
-    q :=           'select p.FldId, -1 as FldPId, u.FldUsername as FldPerson, FldName, FldSurname, FldEmail'
-    + sLineBreak + 'from DbaPerson.dbo.TblPerson p inner join'
-    + sLineBreak + '     DbaUser.dbo.TblUser u on (u.FldId = p.FldId)'
-    + sLineBreak + 'where u.FldUsername = ''' + Person + '''';
-    Result := IvDbaCls.DsFD(q, d, IvFbk);
-    try
-      Id           := d.FieldByName('FldId'         ).AsInteger;
-      PId          := d.FieldByName('FldPId'        ).AsInteger;
-      Person       := d.FieldByName('FldPerson'     ).AsString;
-      Name         := d.FieldByName('FldName'       ).AsString;
-      Surname      := d.FieldByName('FldSurname'    ).AsString;
-      Email        := d.FieldByName('FldEmail'      ).AsString;
-    finally
-      FreeAndNil(d);
-    end;
-    {$ENDREGION}
-
-    IvFbk  := 'Person selected';
-    Result := true;
-
-  except
-    on e: Exception do begin
-      IvFbk  := str.E(e);
-      Result := false;
-    end;
-  end;
 end;
 
 function TPerRec.FullName: string;
@@ -12376,14 +12559,14 @@ begin
   Result := Format('%s\%s', [sys.PER_DIR, UpperCase(p[1])]);
 end;
 
-function TPerRec.PicturePath(var IvDbaCls: TDbaCls; IvPerson: string): string;
+function TPerRec.PicturePath(IvPerson: string): string;
 var
   p: string;
 begin
   p := iif.NxD(IvPerson, Person);
   Result := Format('%s\%s.png', [PathAlpha(p), p]);
   if not FileExists(Result) then
-    img.DbaToDisk(IvDbaCls, Result, 'DbaPerson.dbo.TblPerson', 'FldPicture', Format('FldPerson = ''%s''', [p]));
+    img.DbaToDisk(Result, 'DbaPerson.dbo.TblPerson', 'FldPicture', Format('FldPerson = ''%s''', [p]));
 //Result := '/WksImageIsapiProject.dll/Image?CoFrom=Person&CoName=' + IvPerson;
 end;
 
@@ -13115,7 +13298,7 @@ end;
 {$ENDREGION}
 
 {$REGION 'TRvaRec'}
-function TRvaRec.RvFunction2(var IvDbaCls: TDbaCls; f, a: TStringVector): string;
+function TRvaRec.RvFunction2(f, a: TStringVector): string;
 var
   i, id: integer; // counter, id
   wv: TTkvVec; // webrequest
@@ -13143,8 +13326,8 @@ begin
     {$ENDREGION}
 
     {$REGION 'FromDba'}
-    q := Format('select Fld%s from DbaContact.dbo.TblContact where FldOwner = ''%s'' and FldOrder = 0', [f[1], a[0]]);
-    Result := IvDbaCls.ScalarFD(q, '', k);
+//    q := Format('select Fld%s from DbaContact.dbo.TblContact where FldOwner = ''%s'' and FldOrder = 0', [f[1], a[0]]);
+//    Result := IvDbaCls.ScalarFD(q, '', k);
     {$ENDREGION}
 
 //else if  f.StartsWith('Contact') then begin
@@ -13212,7 +13395,7 @@ begin
 
     {$REGION 'Report'}
     if          SameText(f[1], 'Report') then begin
-      Result := htm.Report(IvDbaCls, a[0].ToInteger);
+      Result := htm.Report(a[0].ToInteger);
     {$ENDREGION}
 
     {$REGION 'Select'}
@@ -13234,10 +13417,10 @@ begin
     {$ENDREGION}
 
     {$REGION 'FromDba'}
-    id := IvDbaCls.HIdFromIdOrPath('DbaOrganization.dbo.TblOrganization', 'FldOrganization', a[0]);         // [RvOrganizationSlogan()]
-    id := org.Id;                                                                                      // [RvOrganizationField(Root/W/Wks, Slogan)]
-    q := Format('select Fld%s from DbaOrganization.dbo.TblOrganization where FldId = %d', [f[1], id]);
-    Result := IvDbaCls.ScalarFD(q, '', k);
+//    id := IvDbaCls.HIdFromIdOrPath('DbaOrganization.dbo.TblOrganization', 'FldOrganization', a[0]);         // [RvOrganizationSlogan()]
+//    id := org.Id;                                                                                      // [RvOrganizationField(Root/W/Wks, Slogan)]
+//    q := Format('select Fld%s from DbaOrganization.dbo.TblOrganization where FldId = %d', [f[1], id]);
+//    Result := IvDbaCls.ScalarFD(q, '', k);
     {$ENDREGION}
 
   {$ENDREGION}
@@ -13267,9 +13450,9 @@ begin
 
     {$REGION 'FromDba'}
     end else begin
-      id := IvDbaCls.HIdFromIdOrPath('DbaPage.dbo.TblPage', 'FldPage', a[0]);
-      q := Format('select Fld%s from DbaPage.dbo.TblPage where FldId = %d', [f[1], id]);
-      Result := IvDbaCls.ScalarFD(q, '', k);
+//      id := IvDbaCls.HIdFromIdOrPath('DbaPage.dbo.TblPage', 'FldPage', a[0]);
+//      q := Format('select Fld%s from DbaPage.dbo.TblPage where FldId = %d', [f[1], id]);
+//      Result := IvDbaCls.ScalarFD(q, '', k);
     end;
     {$ENDREGION}
 
@@ -13292,12 +13475,12 @@ begin
     if          SameText(f[1], 'Param') then begin
       if not a[0].StartsWith('Root/System/Param/', true) then
         a0 := 'Root/System/Param/' + a[0];
-      Result := obj.DbaParamGet(IvDbaCls, 'System', a0, a[1]);
+      Result := obj.DbaParamGet('System', a0, a[1]);
     {$ENDREGION}
 
     {$REGION 'Switch'}
     end else if SameText(f[1], 'Switch') then begin
-      Result := BoolToStr(obj.DbaSwitchGet(IvDbaCls, 'System', a0, StrToBool(a[1])));
+      Result := BoolToStr(obj.DbaSwitchGet('System', a0, StrToBool(a[1])));
     end;
     {$ENDREGION}
 
@@ -13346,7 +13529,7 @@ begin
 
 end;
 
-function TRvaRec.RvFunction(var IvDbaCls: TDbaCls; IvFunction, IvArgsList: string): string;
+function TRvaRec.RvFunction(IvFunction, IvArgsList: string): string;
 
   {$REGION 'var'}
 var
@@ -13356,8 +13539,9 @@ var
   q, qs, qi, qd, df: string; // sql, server, instance, databasedef, default
   tbl, id, pid, fc: string; // table, id, pid, fieldcsv
   a: TStringVector; // argsvect
-  d: TDataSet; //dei: TEdiRec; // dataset, editinfo
+  d: TFDDataSet; //dei: TEdiRec; // dataset, editinfo
 //p: TPageRec;
+  xx: TDbaCls;
   {$ENDREGION}
 
 begin
@@ -13425,7 +13609,12 @@ begin
       qs := a[2]; // sqlserver
       qi := a[3]; // sqlinstance
       qd := a[4]; // sqldefaultdb
-      r := IvDbaCls.ScalarFD(q, df, k);
+      xx := TDbaCls.Create(FDManager);
+      try
+        r := xx.ScalarFD(q, df, k);
+      finally
+        FreeAndNil(xx);
+      end;
     end
   //else if f = 'DbaSaUsername'                                                 then r := sys.DBA_SA
   //else if f = 'DbaSaPassword'                                                then r := sys.DBA_SA_PASSWORD
@@ -13474,8 +13663,9 @@ begin
       qi  := a[8]; // sqlinstance
       qd  := a[9]; // sqldefaultdb
       // dba
+      xx := TDbaCls.Create(FDManager);
       try
-        ok := IvDbaCls.DsFD(q, d, k);
+        ok := xx.DsFD(q, d, k);
         if not ok then
           r := k // HAlertW(k)
         else begin
@@ -13484,6 +13674,7 @@ begin
         end;
       finally
         d.Free;
+        FreeAndNil(xx);
       end;
     end
 //  else if  f = 'HImg'                                                         then r := HImg(a[0], a[1], a[2], a[3]) // [RvHImg(source| alt| link| switches)]
@@ -13495,9 +13686,10 @@ begin
       q := a[1];
 //      if str.Has(q, 'SqlRepo:') then
 //        q := SqlRepo(q);
-      q := Rv(IvDbaCls, q); // *** recursive ***
+      q := Rv(q); // *** recursive ***
+      xx := TDbaCls.Create(FDManager);
       try
-        ok := IvDbaCls.DsFD(q, d, k);
+        ok := xx.DsFD(q, d, k);
         if (not ok) or (d.IsEmpty) then
           r := k // HAlertW(k)
         else begin
@@ -13506,6 +13698,7 @@ begin
         end;
       finally
         d.Free;
+        FreeAndNil(xx);
       end;
     end
 //  else if  f = 'HReport'                                                      then r := HReport(a[0], a[1]) // [HReport(id| switches)]
@@ -13523,8 +13716,9 @@ begin
       qi  := a[7];                                   // sqlinstance
       qd  := a[8];                                   // sqldefaultdb
       // dba
+      xx := TDbaCls.Create(FDManager);
       try
-        ok := IvDbaCls.DsFD(q, d, k);
+        ok := xx.DsFD(q, d, k);
         if not ok then
           r := k // HAlertW(k)
         else begin
@@ -13533,6 +13727,7 @@ begin
         end;
       finally
         d.Free;
+        FreeAndNil(xx);
       end;
     end
     else if  f = 'HTreeView'                                                    then begin // [RvHTreeView(0.table                  |1.fieldscsv           |2.rootid|3.optionjson                                  |4.editinfo|5.title |6.coname  |7.level|8.switches|9.sqlserver|10.sqlinstance|11.sqldefaultdb)]
@@ -13559,8 +13754,9 @@ begin
       qi  := a[10];                                  // sqlinstance
       qd  := a[11];                                  // sqldefaultdb
       // dba
+      xx := TDbaCls.Create(FDManager);
       try
-        ok := IvDbaCls.DsFD(q, d, k);
+        ok := xx.DsFD(q, d, k);
         if not ok then
           r := k // HAlertW(k)
         else begin
@@ -13571,6 +13767,7 @@ begin
         end;
       finally
         d.Free;
+        FreeAndNil(xx);
       end;
     end
 //    else if  f = 'HH'                                                           then r := HH(a[0], a[1], a[2])                   // [HH(title| subtitle| switches)]
@@ -14030,7 +14227,7 @@ begin
 
 end;
 
-function TRvaRec.Rv2(var IvDbaCls: TDbaCls; IvString: string; IvCommentRemove, IvEmptyLinesRemove, IvTrim: boolean): string;
+function TRvaRec.Rv2(IvString: string; IvCommentRemove, IvEmptyLinesRemove, IvTrim: boolean): string;
 
   {$REGION 'Var'}
 var
@@ -14122,10 +14319,10 @@ begin
 
       // recursively apply Rv() to eventual params
       while rex.Has(a, rex.REX_RV_CHECK_PAT, [roIgnoreCase, roSingleLine]) do // str.Has(a, '[Rv')
-        a := Rv(IvDbaCls, a);
+        a := Rv(a);
 
       // content
-      c := RvFunction(IvDbaCls, f, a);
+      c := RvFunction(f, a);
 
       // replace
       s := str.Replace(s, g, c); // IvString
@@ -14136,7 +14333,7 @@ begin
 
     // recursively apply Rv() to eventual tags just inserted above
     if rex.Has(s, rex.REX_RV_CHECK_PAT, [roIgnoreCase, roSingleLine]) then
-      s := Rv(IvDbaCls, s);
+      s := Rv(s);
 
   except
     on e: ERegularExpressionError do
@@ -14160,7 +14357,7 @@ begin
 
 end;
 
-function TRvaRec.Rv(var IvDbaCls: TDbaCls; IvString: string; IvCommentRemove: boolean): string;
+function TRvaRec.Rv(IvString: string; IvCommentRemove: boolean): string;
 type
   TTag = record
     Orig: string;
@@ -14211,11 +14408,11 @@ begin
     a := vec.FromStr(t[i].Args, '|,;');
 
     // funcresult
-    x := RvFunction2(IvDbaCls, f, a);
+    x := RvFunction2(f, a);
 
     // replace
     if not iis.Ex(x) then begin
-      if obj.DbaSwitchGet(IvDbaCls, 'System', 'ShowUnknownRvTags', true) then begin
+      if obj.DbaSwitchGet('System', 'ShowUnknownRvTags', true) then begin
         Result := str.Replace(Result, o, str.Replace(str.Replace(o, '[', '('), ']', ')'))
       end else
         Result := str.Replace(Result, o, '');
@@ -14225,7 +14422,7 @@ begin
 
   // recursive
   if Result.Contains('[Rv') then
-    Result := Rv(IvDbaCls, Result, IvCommentRemove);
+    Result := Rv(Result, IvCommentRemove);
 end;
 
 function TRvaRec.RvDs(IvString: string; IvDs: TDataset): string;
@@ -14341,37 +14538,177 @@ begin
 end;
 {$ENDREGION}
 
-{$REGION 'TSesRec'}
-function TSesRec.DbaNewAndSet(var IvDbaCls: TDbaCls; IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean;
+{$REGION 'TSbuRec'}
+procedure TSbuRec.Add(IvString: string; IvNlPrefix: integer);
 var
-  q, w: string;
-  z: integer;
+  i: integer;
 begin
-  // exit
-  Result := iis.Ex(IvOrganization) and iis.Ex(IvUsername) and iis.Ex(IvPassword);
-  if not Result then begin
-    IvFbk := 'Unable to create new session, organization or username or password are empty';
-    Exit
-  end;
-
-  // NEW
-  Randomize(); // allows for use of the random() function
-  Session := IntToStr(Random(999999));
-
-  // dba
-  w := usr.UsernameWhere(IvOrganization, IvUsername, IvPassword, false);
-  q := Format('update DbaUser.dbo.TblUser set FldSession = ''%s'' where %s', [Session, w]);
-  IvDbaCls.ExecFD(q, z, IvFbk);
+  for i := 1 to IvNlPrefix do
+    Text := Text + sLineBreak;
+  Text := Text + IvString;
 end;
 
-function TSesRec.DbaUnset(var IvDbaCls: TDbaCls; IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean;
+procedure TSbuRec.AiE(IvString, IvDefault: string; IvNlPrefix: integer);
+var
+  s: string;
+begin
+  s := IvString;
+  if iis.Nx(s) then
+    s := IvDefault;
+  Add(s, IvNlPrefix);
+end;
+
+procedure TSbuRec.Aif(IvString: string; IvTest: boolean; IvNlPrefix: integer);
+begin
+  if IvTest then
+    Add(IvString, IvNlPrefix);
+end;
+
+procedure TSbuRec.AiX(IvString: string; IvNlPrefix: integer);
+begin
+  if iis.Ex(IvString) then
+    Add(IvString, IvNlPrefix);
+end;
+
+procedure TSbuRec.Ann(IvString: string);
+begin
+  Text := Text + IvString;
+end;
+
+procedure TSbuRec.ATg(IvString, IvTag: string);
+begin
+  Fmt('<%s>%s</%s>', [IvTag, IvString, IvTag]);
+end;
+
+procedure TSbuRec.AXr(IvString, IvReturn: string; IvNlPrefix: integer);
+begin
+  if iis.Ex(IvString) then
+    Add(IvReturn, IvNlPrefix);
+end;
+
+procedure TSbuRec.Clear;
+begin
+  Text := '';
+end;
+
+procedure TSbuRec.Emp(IvNl: integer);
+var
+  i: integer;
+begin
+  for i := 1 to IvNl do
+    Text := Text + sLineBreak;
+end;
+
+procedure TSbuRec.Fie(IvFormat: string; IvVarRecVector: array of TVarRec; IvTest: string; IvNlPrefix: integer);
+begin
+  if iis.Ex(IvTest) then
+    Fmt(IvFormat, IvVarRecVector, IvNlPrefix);
+end;
+
+procedure TSbuRec.Fif(IvFormat: string; IvVarRecVector: array of TVarRec; IvTest: boolean; IvNlPrefix: integer);
+begin
+  if IvTest then
+    Fmt(IvFormat, IvVarRecVector, IvNlPrefix);
+end;
+
+procedure TSbuRec.FiX(IvFormat, IvIfExist: string; IvNlPrefix: integer);
+begin
+  if IvIfExist <> '' then
+    Add(Format(IvFormat, [IvIfExist]), IvNlPrefix);
+end;
+
+procedure TSbuRec.FiY(IvFormat, IvFormat2, IvIfExist: string; IvNlPrefix: integer);
+begin
+  if IvIfExist = '' then
+    Add(Format(IvFormat, ['']), IvNlPrefix)
+  else
+    Add(Format(IvFormat, [Format(IvFormat2, [IvIfExist])]), IvNlPrefix);
+end;
+
+procedure TSbuRec.Fmt(IvFormat: string; IvVarRecVector: array of TVarRec; IvNlPrefix: integer);
+begin
+  Add(Format(IvFormat, IvVarRecVector), IvNlPrefix);
+end;
+
+procedure TSbuRec.Iif(IvTest: boolean; IvTrueVal, IvFalseVal: string; IvNlPrefix: integer);
+begin
+  if IvTest then
+    Add(IvTrueVal, IvNlPrefix)
+  else
+    Add(IvFalseVal, IvNlPrefix);
+end;
+
+procedure TSbuRec.Rep(IvString, IvOut, IvIn: string; IvNlPrefix: integer);
+begin
+  Add(StringReplace(IvString, IvOut, IvIn, [rfReplaceAll, rfIgnoreCase]), IvNlPrefix);
+end;
+
+procedure TSbuRec.Swi(IvSwitchList, IvSwitch, IvString: string; IvNlPrefix: integer);
+begin
+  if IvSwitchList.Contains(IvSwitch) then
+    Add(IvString, IvNlPrefix);
+end;
+{
+procedure TSbuRec.AdS(IvString: string; NlPrefix: boolean);
+begin
+  Fmt(SUCCESS_STR_FMT, [IvString], NlPrefix);
+end;
+
+procedure TSbuRec.AdW(IvString: string; NlPrefix: boolean);
+begin
+  Fmt(WARNING_STR_FMT, [IvString], NlPrefix);
+end;
+
+procedure TSbuRec.AdE(IvE: Exception; NlPrefix: boolean);
+begin
+  Fmt(EXCEPTION_FORMAT, [IvE.Message], NlPrefix);
+end;
+}
+{$ENDREGION}
+
+{$REGION 'TSesRec'}
+function TSesRec.DbaNewAndSet(IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean;
 var
   q, w: string;
   z: integer;
+  x: TDbaCls;
 begin
-  w := usr.UsernameWhere(IvOrganization, IvUsername, IvPassword, false);
-  q := Format('update DbaUser.dbo.TblUser set FldSession = ''%s'' where %s', [Session, w]);
-  Result := IvDbaCls.ExecFD(q, z, IvFbk);
+  x := TDbaCls.Create(FDManager);
+  try
+    // exit
+    Result := iis.Ex(IvOrganization) and iis.Ex(IvUsername) and iis.Ex(IvPassword);
+    if not Result then begin
+      IvFbk := 'Unable to create new session, organization or username or password are empty';
+      Exit
+    end;
+
+    // NEW
+    Randomize(); // allows for use of the random() function
+    Session := IntToStr(Random(999999));
+
+    // dba
+    w := usr.UsernameWhere(IvOrganization, IvUsername, IvPassword, false);
+    q := Format('update DbaUser.dbo.TblUser set FldSession = ''%s'' where %s', [Session, w]);
+    x.ExecFD(q, z, IvFbk);
+  finally
+    FreeAndNil(x);
+  end;
+end;
+
+function TSesRec.DbaUnset(IvOrganization, IvUsername, IvPassword: string; var IvFbk: string): boolean;
+var
+  q, w: string;
+  z: integer;
+  x: TDbaCls;
+begin
+  x := TDbaCls.Create(FDManager);
+  try
+    w := usr.UsernameWhere(IvOrganization, IvUsername, IvPassword, false);
+    q := Format('update DbaUser.dbo.TblUser set FldSession = ''%s'' where %s', [Session, w]);
+    Result := x.ExecFD(q, z, IvFbk);
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
 function TSesRec.Info: string;
@@ -15653,35 +15990,41 @@ end;
 {$ENDREGION}
 
 {$REGION 'TSysRec'}
-procedure TSysRec.DbaLog(var IvDbaCls: TDbaCls; IvHost, IvAgent, IvTag, IvValue: string; IvLifeMs: integer);
+procedure TSysRec.DbaLog(IvHost, IvAgent, IvTag, IvValue: string; IvLifeMs: integer);
 var
   s, k: string;
   z: integer;
+  x: TDbaCls;
 begin
-  s :=           'insert into DbaSystem.dbo.TblLog'
-  + sLineBreak + 'select'
-  + sLineBreak + '     ''' + DateTimeToStr(Now) + '''' // FldDateTime
-  + sLineBreak + '   , ''' + IvHost  + ''''            // FldHost
-  + sLineBreak + '   , ''' + IvAgent + ''''            // FldAgent
-  + sLineBreak + '   , ''' + IvTag   + ''''            // FldTag
-  + sLineBreak + '   , ''' + IvValue + '''';           // FldValue
-  if not IvDbaCls.ExecFD(s, z, k) then
-    ods('TSYSREC.DBALOG', k);
+  x := TDbaCls.Create(FDManager);
+  try
+    s :=           'insert into DbaSystem.dbo.TblLog'
+    + sLineBreak + 'select'
+    + sLineBreak + '     ''' + DateTimeToStr(Now) + '''' // FldDateTime
+    + sLineBreak + '   , ''' + IvHost  + ''''            // FldHost
+    + sLineBreak + '   , ''' + IvAgent + ''''            // FldAgent
+    + sLineBreak + '   , ''' + IvTag   + ''''            // FldTag
+    + sLineBreak + '   , ''' + IvValue + '''';           // FldValue
+    if not x.ExecFD(s, z, k) then
+      ods('TSYSREC.DBALOG', k);
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
-function TSysRec.HomePath(var IvDbaCls: TDbaCls): string;
+function TSysRec.HomePath(): string;
 begin
-  Result := obj.DbaParamGet(IvDbaCls, 'System', 'HomePath', 'X:\$\X\Win32\Debug');
+  Result := obj.DbaParamGet('System', 'HomePath', 'X:\$\X\Win32\Debug');
 end;
 
-function TSysRec.IconUrl(var IvDbaCls: TDbaCls): string;
+function TSysRec.IconUrl(): string;
 begin
-  Result := obj.DbaParamGet(IvDbaCls, 'System', 'IconUrl', '/Organization/W/Wks/WksIcon.ico');
+  Result := obj.DbaParamGet('System', 'IconUrl', '/Organization/W/Wks/WksIcon.ico');
 end;
 
-function TSysRec.IncPath(var IvDbaCls: TDbaCls): string;
+function TSysRec.IncPath(): string;
 begin
-  Result := obj.DbaParamGet(IvDbaCls, 'System', '$IncPath', 'X:\$Inc');
+  Result := obj.DbaParamGet('System', '$IncPath', 'X:\$Inc');
 end;
 
 function TSysRec.Info: string;
@@ -15689,9 +16032,9 @@ begin
   Result := Format('%s %s %s', [Acronym, Name, Www]);
 end;
 
-function TSysRec.LogoUrl(var IvDbaCls: TDbaCls): string;
+function TSysRec.LogoUrl(): string;
 begin
-  Result := obj.DbaParamGet(IvDbaCls, 'System', 'LogoUrl', '/Organization/W/Wks/WksLogo.png');
+  Result := obj.DbaParamGet('System', 'LogoUrl', '/Organization/W/Wks/WksLogo.png');
 end;
 
 function TSysRec.RioCopyright: string;
@@ -15797,14 +16140,14 @@ begin
   end;
 end;
 
-function TSysRec.Slogan(var IvDbaCls: TDbaCls): string;
+function TSysRec.Slogan(): string;
 begin
-  Result := obj.DbaParamGet(IvDbaCls, 'System', 'Slogan', 'Programmed for progress');
+  Result := obj.DbaParamGet('System', 'Slogan', 'Programmed for progress');
 end;
 
-function TSysRec.Support(var IvDbaCls: TDbaCls): string;
+function TSysRec.Support(): string;
 begin
-  Result := obj.DbaParamGet(IvDbaCls, 'System', 'Support', Format('Please contact a system administator via email: %s', [ADMIN_CSV]));
+  Result := obj.DbaParamGet('System', 'Support', Format('Please contact a system administator via email: %s', [ADMIN_CSV]));
 end;
 
 function TSysRec.Url: string;
@@ -15821,80 +16164,92 @@ end;
 {$ENDREGION}
 
 {$REGION 'TUagRec'}
-function TUagRec.DbaExists(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TUagRec.DbaExists(var IvFbk: string): boolean;
 begin
   Result := false;
   raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
 
-function TUagRec.DbaInsert(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TUagRec.DbaInsert(var IvFbk: string): boolean;
 var
   q: string;
   z: integer;
+  x: TDbaCls;
 begin
+  x := TDbaCls.Create(FDManager);
+  try
 
-  {$REGION 'Insert'}
-  q :=           'insert into DbaClient.dbo.TblUserAgent'
-  + sLineBreak + 'select'
-  + sLineBreak + '    ' + sql.Val(UserAgent      ) // FldUserAgent
-  + sLineBreak + '  , ' + sql.Val(Client         ) // FldClient
-  + sLineBreak + '  , ' + sql.Val(ClientVersion  ) // FldClientVersion
-  + sLineBreak + '  , ' + sql.Val(Os             ) // FldOs
-  + sLineBreak + '  , ' + sql.Val(OsVersion      ) // FldOsVersion
-  + sLineBreak + '  , ' + sql.Val(Engine         ) // FldEngine
-  + sLineBreak + '  , ' + sql.Val(Vendor         ) // FldVendor
-  + sLineBreak + '  , ' + sql.Val(Kind           ) // FldKind
-  + sLineBreak + '  , ' + sql.Val(Kind2          ) // FldKind2
-  + sLineBreak + '  , ' + sql.Val(Hardware       ) // FldHardware
-  + sLineBreak + '  , ' + sql.Val(BitArchitecture) // FldBitArchitecture
-  + sLineBreak + '  , ' + sql.Val(DateTime       ) // FldDateTime
-  + sLineBreak + '  , ' + sql.Val(Hit            ) // FldHit
-  ;
-  Result := IvDbaCls.ExecFD(q, z, IvFbk);
-  {$ENDREGION}
+    {$REGION 'Insert'}
+    q :=           'insert into DbaClient.dbo.TblUserAgent'
+    + sLineBreak + 'select'
+    + sLineBreak + '    ' + sql.Val(UserAgent      ) // FldUserAgent
+    + sLineBreak + '  , ' + sql.Val(Client         ) // FldClient
+    + sLineBreak + '  , ' + sql.Val(ClientVersion  ) // FldClientVersion
+    + sLineBreak + '  , ' + sql.Val(Os             ) // FldOs
+    + sLineBreak + '  , ' + sql.Val(OsVersion      ) // FldOsVersion
+    + sLineBreak + '  , ' + sql.Val(Engine         ) // FldEngine
+    + sLineBreak + '  , ' + sql.Val(Vendor         ) // FldVendor
+    + sLineBreak + '  , ' + sql.Val(Kind           ) // FldKind
+    + sLineBreak + '  , ' + sql.Val(Kind2          ) // FldKind2
+    + sLineBreak + '  , ' + sql.Val(Hardware       ) // FldHardware
+    + sLineBreak + '  , ' + sql.Val(BitArchitecture) // FldBitArchitecture
+    + sLineBreak + '  , ' + sql.Val(DateTime       ) // FldDateTime
+    + sLineBreak + '  , ' + sql.Val(Hit            ) // FldHit
+    ;
+    Result := x.ExecFD(q, z, IvFbk);
+    {$ENDREGION}
 
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
-function TUagRec.DbaSelect(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TUagRec.DbaSelect(var IvFbk: string): boolean;
 var
   d: TFDDataset;
   w, q: string;
+  x: TDbaCls;
 begin
+  x := TDbaCls.Create(FDManager);
+  try
 
-  {$REGION 'Insert'}
-  if not IvDbaCls.RecExists('DbaClient.dbo.TblUserAgent', 'FldUserAgent', UserAgent, IvFbk) then begin
-    ods('USERAGENT', 'Useragent record does not exists, create it now');
-    DbaInsert(IvDbaCls, IvFbk);
-  end else begin
-    // update the datetime in register
-    w := 'FldUserAgent = ' + sql.Val(UserAgent);
-    IvDbaCls.FldSet('DbaClient.dbo.TblUserAgent', 'FldDateTime', w, Now, IvFbk);
-    IvDbaCls.FldInc('DbaClient.dbo.TblUserAgent', 'FldHit', w, IvFbk);
+    {$REGION 'Insert'}
+    if not x.RecExists('DbaClient.dbo.TblUserAgent', 'FldUserAgent', UserAgent, IvFbk) then begin
+      ods('USERAGENT', 'Useragent record does not exists, create it now');
+      DbaInsert(IvFbk);
+    end else begin
+      // update the datetime in register
+      w := 'FldUserAgent = ' + sql.Val(UserAgent);
+      x.FldSet('DbaClient.dbo.TblUserAgent', 'FldDateTime', w, Now, IvFbk);
+      x.FldInc('DbaClient.dbo.TblUserAgent', 'FldHit', w, IvFbk);
+    end;
+    {$ENDREGION}
+
+    {$REGION 'Select'}
+    q := Format('select * from DbaClient.dbo.TblUserAgent where FldUserAgent = ''%s''', [UserAgent]);
+    Result := x.DsFD(q, d, IvFbk, true);
+    if not Result then begin
+      Result := DbaInsert(IvFbk);
+      Result := x.DsFD(q, d, IvFbk, true);
+    end;
+    UserAgent       := d.FieldByName('FldUserAgent'      ).AsString;
+    Client          := d.FieldByName('FldClient'         ).AsString;
+    ClientVersion   := d.FieldByName('FldClientVersion'  ).AsString;
+    Os              := d.FieldByName('FldOs'             ).AsString;
+    OsVersion       := d.FieldByName('FldOsVersion'      ).AsString;
+    Engine          := d.FieldByName('FldEngine'         ).AsString;
+    Vendor          := d.FieldByName('FldVendor'         ).AsString;
+    Kind            := d.FieldByName('FldKind'           ).AsString;
+    Kind2           := d.FieldByName('FldKind2'          ).AsString;
+    Hardware        := d.FieldByName('FldHardware'       ).AsString;
+    BitArchitecture := d.FieldByName('FldBitArchitecture').AsString;
+    DateTime        := d.FieldByName('FldDateTime'       ).AsDateTime;
+    Hit             := d.FieldByName('FldHit'            ).AsInteger;
+    {$ENDREGION}
+
+  finally
+    FreeAndNil(x);
   end;
-  {$ENDREGION}
-
-  {$REGION 'Select'}
-  q := Format('select * from DbaClient.dbo.TblUserAgent where FldUserAgent = ''%s''', [UserAgent]);
-  Result := IvDbaCls.DsFD(q, d, IvFbk, true);
-  if not Result then begin
-    Result := DbaInsert(IvDbaCls, IvFbk);
-    Result := IvDbaCls.DsFD(q, d, IvFbk, true);
-  end;
-  UserAgent       := d.FieldByName('FldUserAgent'      ).AsString;
-  Client          := d.FieldByName('FldClient'         ).AsString;
-  ClientVersion   := d.FieldByName('FldClientVersion'  ).AsString;
-  Os              := d.FieldByName('FldOs'             ).AsString;
-  OsVersion       := d.FieldByName('FldOsVersion'      ).AsString;
-  Engine          := d.FieldByName('FldEngine'         ).AsString;
-  Vendor          := d.FieldByName('FldVendor'         ).AsString;
-  Kind            := d.FieldByName('FldKind'           ).AsString;
-  Kind2           := d.FieldByName('FldKind2'          ).AsString;
-  Hardware        := d.FieldByName('FldHardware'       ).AsString;
-  BitArchitecture := d.FieldByName('FldBitArchitecture').AsString;
-  DateTime        := d.FieldByName('FldDateTime'       ).AsDateTime;
-  Hit             := d.FieldByName('FldHit'            ).AsInteger;
-  {$ENDREGION}
-
 end;
 {$ENDREGION}
 
@@ -16074,14 +16429,14 @@ end;
 {$ENDREGION}
 
 {$REGION 'TUsrRec'}
-function TUsrRec.AvatarPath(var IvDbaCls: TDbaCls; IvUsername: string): string;
+function TUsrRec.AvatarPath(IvUsername: string): string;
 var
   u: string;
 begin
   u := iif.NxD(IvUsername, Username);
   Result := Format('%s\%s.png', [PathAlpha(u), u]);
   if not FileExists(Result) then
-    img.DbaToDisk(IvDbaCls, Result, 'DbaUser.dbo.TblUser', 'FldAvatar', Format('FldUsername = ''%s''', [u]));
+    img.DbaToDisk(Result, 'DbaUser.dbo.TblUser', 'FldAvatar', Format('FldUsername = ''%s''', [u]));
 //Result := '/WksImageIsapiProject.dll/Image?CoFrom=User&CoName=' + IvUser;
 end;
 
@@ -16093,62 +16448,86 @@ begin
   Result := Format('%s/%s.png', [UrlAlpha(u), u]);
 end;
 
-function TUsrRec.DbaExists(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TUsrRec.DbaExists(var IvFbk: string): boolean;
 var
   w, k: string;
+  x: TDbaCls;
 begin
-  w := Format('FldUsername = ''%s''', [Username]);
-  Result := IvDbaCls.RecExists('DbaUser.dbo.TblUser', w, k);
-  IvFbk := fbk.ExistsStr('User', Username, Result);
+  x := TDbaCls.Create(FDManager);
+  try
+    w := Format('FldUsername = ''%s''', [Username]);
+    Result := x.RecExists('DbaUser.dbo.TblUser', w, k);
+    IvFbk := fbk.ExistsStr('User', Username, Result);
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
-function TUsrRec.DbaIsActive(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TUsrRec.DbaIsActive(var IvFbk: string): boolean;
 var
   w, k: string;
+  x: TDbaCls;
 begin
-  w := Format('FldState = ''%s''', [sta.Active.Key]);
-  Result := IvDbaCls.RecExists('DbaUser.dbo.TblUser', w, k);
-  IvFbk := fbk.IsActiveStr('User', Username, Result);
+  x := TDbaCls.Create(FDManager);
+  try
+    w := Format('FldState = ''%s''', [sta.Active.Key]);
+    Result := x.RecExists('DbaUser.dbo.TblUser', w, k);
+    IvFbk := fbk.IsActiveStr('User', Username, Result);
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
-function TUsrRec.DbaIsAuthenticated(var IvDbaCls: TDbaCls; var IvFbk: string; IvConsiderUsernameOnly, IvPasswordSkip: boolean): boolean;
+function TUsrRec.DbaIsAuthenticated(var IvFbk: string; IvConsiderUsernameOnly, IvPasswordSkip: boolean): boolean;
 var
   w, s: string;
   r: variant; // returnval
+  x: TDbaCls;
 begin
-  // nosqlinjection
-  Organization := str.PartN(Organization, 0, ' ');
-  Username     := str.PartN(Username    , 0, ' ');
-  Password     := str.PartN(Password    , 0, ' ');
+  x := TDbaCls.Create(FDManager);
+  try
+    // nosqlinjection
+    Organization := str.PartN(Organization, 0, ' ');
+    Username     := str.PartN(Username    , 0, ' ');
+    Password     := str.PartN(Password    , 0, ' ');
 
-  // dba
-  if IvConsiderUsernameOnly then begin
-    w := UsernameWhere(Organization, Username, Password, true);
-    Result := IvDbaCls.FldGet('DbaUser.dbo.TblUser', 'FldUsername', w, r, '', IvFbk);
-    s := Username;
-  end else begin
-    w := UsernameWhere(Organization, Username, Password, false);
-    Result := IvDbaCls.FldGet('DbaUser.dbo.TblUser', 'FldUsername', w, r, '', IvFbk);
-    s := Format('%s@%s', [Username, Organization]);
+    // dba
+    if IvConsiderUsernameOnly then begin
+      w := UsernameWhere(Organization, Username, Password, true);
+      Result := x.FldGet('DbaUser.dbo.TblUser', 'FldUsername', w, r, '', IvFbk);
+      s := Username;
+    end else begin
+      w := UsernameWhere(Organization, Username, Password, false);
+      Result := x.FldGet('DbaUser.dbo.TblUser', 'FldUsername', w, r, '', IvFbk);
+      s := Format('%s@%s', [Username, Organization]);
+    end;
+    if not Result then
+      Exit;
+
+    // authenticated?
+    Result := (r = Username) and (r <> '');
+    IvFbk := fbk.IsAuthenticatedStr('User', Username, Result);
+  finally
+    FreeAndNil(x);
   end;
-  if not Result then
-    Exit;
-
-  // authenticated?
-  Result := (r = Username) and (r <> '');
-  IvFbk := fbk.IsAuthenticatedStr('User', Username, Result);
 end;
 
-function TUsrRec.DbaIsLoggedIn(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TUsrRec.DbaIsLoggedIn(var IvFbk: string): boolean;
 var
   w, k: string;
+  x: TDbaCls;
 begin
+  x := TDbaCls.Create(FDManager);
+  try
   w := UsernameWhere(Organization, Username, Password, false) + Format(' and FldSession = ''%s''', [Session]);
-  Result := IvDbaCls.RecExists('DbaUser.dbo.TblUser', w, k);
+  Result := x.RecExists('DbaUser.dbo.TblUser', w, k);
   IvFbk := fbk.IsLoggedStr('User', Username, Result);
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
-function TUsrRec.DbaSelect(var IvDbaCls: TDbaCls; const IvUsername: string; var IvFbk: string): boolean;
+function TUsrRec.DbaSelect(const IvUsername: string; var IvFbk: string): boolean;
 begin
   raise Exception.Create(NOT_IMPLEMENTED_STR);
 end;
@@ -16630,235 +17009,268 @@ begin
 end;
 {$ENDREGION}
 
+{$REGION 'TWapRec'}
+function TWapRec.PathInfoActionIsValid(IvPathInfo: string): boolean;
+var
+  i: integer;
+begin
+  for i := 0 to WebModule.Actions.Count - 1 do begin
+    Result := WebModule.Actions[i].PathInfo = IvPathInfo;
+    if Result then
+      Exit;
+  end;
+end;
+
+procedure TWapRec.Reply(var IvWebResponse: TWebResponse; IvStateCode: integer; IvStateMessage, IvDebug: string);
+begin
+  IvWebResponse.StatusCode := IvStateCode;
+  IvWebResponse.ReasonString := IvStateCode.ToString + ' ' + IvStateMessage;
+//  if IvDebug.IsEmpty then
+//    AddToLog('Response set: ' + IvWebResponse.StatusCode.ToString + ' ' + IvStateMessage, leDevelopment)
+//  else
+//    AddToLog('Response set: ' + IvWebResponse.StatusCode.ToString + ' ' + IvStateMessage + ' Debug Info: ' + IvDebug, leMinorError);
+end;
+{$ENDREGION}
+
 {$REGION 'TWreRec'}
-procedure TWreRec.Init(var IvDbaCls: TDbaCls; IvWebRequest: TWebRequest);
+procedure TWreRec.Init(IvWebRequest: TWebRequest);
 var
   c, o, k: string; // cookie, organization
   t: TDateTime;
+  x: TDbaCls;
 begin
+  x := TDbaCls.Create(FDManager);
+  try
 
-  {$REGION 'UserAgent'}
-  uag.UserAgent := IvWebRequest.UserAgent;
-  //uag.DbaSelect(IvDbaCls, k);
-  {$ENDREGION}
+    {$REGION 'UserAgent'}
+    uag.UserAgent := IvWebRequest.UserAgent;
+    //uag.DbaSelect(IvDbaCls, k);
+    {$ENDREGION}
 
-  {$REGION 'RequestOriginal'}
-  WebRequest           := IvWebRequest;
-//Ire                  := TISAPIRequest(IvWre);
-  {$ENDREGION}
+    {$REGION 'RequestOriginal'}
+    WebRequest           := IvWebRequest;
+  //Ire                  := TISAPIRequest(IvWre);
+    {$ENDREGION}
 
-  {$REGION 'Now'}
-  c := IvWebRequest.CookieFields.Values['CoDateTime']; // CoDateTime is a cookie written by js and is UTC (absolute zero meridian time!)
-  if c = '' then
-    DateTime           := Now     // server time / DtToIso(DateTime)
-  else begin
-    t := dat.FromIso(c, false);   // false will transform utc in your local time zone
-    DateTime           := StrToDateTime(DateTimeToStr(t)); // client time
+    {$REGION 'Now'}
+    c := IvWebRequest.CookieFields.Values['CoDateTime']; // CoDateTime is a cookie written by js and is UTC (absolute zero meridian time!)
+    if c = '' then
+      DateTime           := Now     // server time / DtToIso(DateTime)
+    else begin
+      t := dat.FromIso(c, false);   // false will transform utc in your local time zone
+      DateTime           := StrToDateTime(DateTimeToStr(t)); // client time
+    end;
+    {$ENDREGION}
+
+    {$REGION 'RequestExtended'}
+    // client (server is the reference point so remote_addr is the client_addr)
+  //ClientIp             :=   {10.176.85.121                          }  WebRequest.RemoteIp;                                  //
+    ClientAddr           :=   {10.176.85.121                          }  WebRequest.RemoteAddr;                                // REMOTE_ADDR
+    ClientHost           :=   {localhost                              }  WebRequest.RemoteHost;                                // REMOTE_HOST
+  //ClientPort                {62682                                  }                                                        // REMOTE_PORT
+    ClientAccept         :=   {text/html,application/xml              }  WebRequest.Accept;                                    // HTTP_ACCEPT
+    ClientAcceptEncoding :=   {gzip, deflate                          }  WebRequest.GetFieldByName('HTTP_ACCEPT_ENCODING');    //
+    ClientAcceptLanguage :=   {en-US,en                               }  WebRequest.GetFieldByName('HTTP_ACCEPT_LANGUAGE');    //
+    ClientApp            :=   {Mozilla/5.0 Windows NT...              }  WebRequest.UserAgent;                                 // HTTP_USER_AGENT   / WksClient 1.0.0.1
+    ClientAppVersion     :=   {5.0 / 1.0.0.1                          }  '';                                                   // UseragentVer / ClientVersion
+    // clientfingerprint
+    ClientDoNotTrack     :=   {1                                      }  WebRequest.CookieFields.Values['CoDoNotTrack'];       // HTTP_DNT
+    ClientTimezoneOffset :=   {?                                      }  WebRequest.CookieFields.Values['CoTimezoneOffset'];   //
+    ClientLanguage       :=   {?                                      }  WebRequest.CookieFields.Values['CoLanguage'];         //
+    ClientPlatform       :=   {?                                      }  WebRequest.CookieFields.Values['CoPlatform'];         //
+    ClientOs             :=   {?                                      }  WebRequest.CookieFields.Values['CoOs'];               //
+    ClientCpuCores       :=   {?                                      }  WebRequest.CookieFields.Values['CoCpuCores'];         //
+    ClientScreen         :=   {?                                      }  WebRequest.CookieFields.Values['CoScreen'];           //
+    ClientAudio          :=   {?                                      }  WebRequest.CookieFields.Values['CoAudio'];            //
+    ClientVideo          :=   {?                                      }  WebRequest.CookieFields.Values['CoVideo'];            //
+    ClientLocalStorage   :=   {?                                      }  WebRequest.CookieFields.Values['CoLocalStorage'];     //
+    ClientSessionStorage :=   {?                                      }  WebRequest.CookieFields.Values['CoSessionStorage'];   //
+    ClientIndexedDb      :=   {?                                      }  WebRequest.CookieFields.Values['CoIndexedDb'];        //
+    ClientFingerprint    :=   {?                                      }  WebRequest.CookieFields.Values['CoFingerprint'];      //
+    // user
+    UserOrganization     :=   {Wks (fromurl/dba)                      }  x.ScalarFD('select top(1) FldOrganization from DbaOrganization.dbo.TblOrganization where FldState= ''Active'' and FldWww = ''' + WebRequest.Host + '''', 'Unknown', k);
+    UserDomain           :=   {?                                      }  WebRequest.CookieFields.Values['CoDomain'];           //
+    UserComputer         :=   {phobos                                 }  WebRequest.CookieFields.Values['CoComputer'];         //
+    Username             :=   {giarussi | 353992                      }  str.Coalesce([WebRequest.CookieFields.Values['CoUsername'], WebRequest.GetFieldByName('HTTP_SMUSER'), WebRequest.GetFieldByName('HTTP_SMMATRICOLA')]);
+  //UserPassword         :=                                              WebRequest.CookieFields.Values['CoPassword'];         //
+  //UserLogon            :=   {?                                      }  WebRequest.GetFieldByName('LOGON_USER');              //
+  //UserRemote           :=   {?                                      }  WebRequest.GetFieldByName('REMOTE_USER');             //
+  //UserRemoteUnmapped   :=   {/                                      }  WebRequest.GetFieldByName('UNMAPPED_REMOTE_USER');    //
+    // session
+    Session              :=   {?                                      }  WebRequest.CookieFields.Values['CoSession'];          // was initiated in WebModuleAfterDispatch AT THE END of previous request   *** WILL REPLACE USERNAME+PASSSWORD or FINGERPRINT***
+    Otp                  :=   {?                                      }  WebRequest.CookieFields.Values['CoOtp'];              //
+    // http
+    HttpOrigin           :=   {                                       }  WebRequest.GetFieldByName('HTTP_ORIGIN');             //
+    HttpProtocol         :=   {HTTP/1.1                               }  WebRequest.ProtocolVersion;                           // SERVER_PROTOCOL
+    HttpMethod           :=   {GET, POST                              }  WebRequest.Method;                                    // REQUEST_METHOD / WebRequest.MethodType / Ecb.Method
+    // request
+    RequestId            :=   {095EBA6CEcb.ConnId                     }  (WebRequest as TISAPIRequest).Ecb^.ConnId;            //
+    Connection           :=   {keep-alive                             }  WebRequest.Connection;                                // HTTP_CONNECTION
+    Host                 :=   {aiwymsapp.ai.lfoundry.com              }  WebRequest.Host;                                      // SERVER_NAME
+    Url                  :=   {/WksIsapiProject.dll *partial or empty*}  WebRequest.Url ;                                      //
+    PathInfo             :=   {/Info                                  }  WebRequest.PathInfo;                                  // PATH_INFO / Ecb.PathInfo
+  //InternalPathInfo     :=   {/Info                                  }  WebRequest.InternalPathInfo;                          //
+  //RawPathInfo          :=   {/Info                                  }  WebRequest.RawPathInfo;                               //
+  //PathTranslated       :=   {X:\$\X\Win32\Debug\Info                }  WebRequest.PathTranslated;                            // PATH_TRANSLATED / Ecb.PathTranslated
+    Query                :=   {?CoId=381&CoXxx=2                      }  WebRequest.Query;                                     // QUERY_STRING / Ecb.Query / WebRequest.QueryFields.CommaText
+  //Referer              :=   {http://abc.com/WksIsapi.dll/Run?CoId=12}  WebRequest.Referer;                                   // HTTP_REFERER / full url or generally *empty*
+  //Title                :=   {*empty*                                }  WebRequest.Title;                                     //
+  //Cookie               :=   {CoOtp=933073; CoDomain=LOCALHOST;      }  WebRequest.Cookie;                                    // HTTP_COOKIE
+  //TotalBytes           :=   {0                                      }  WebRequest.ContentLength;                             // Ecb.TotalBytes
+  //Expires              :=   {?                                      }  TDateTime(IvWebRequest.Expires);                      //
+  //MimeType             :=   {?                                      }  '';                                                   //
+    // content
+  //ContentEncoding      :=   {*empty*                                }  WebRequest.ContentEncoding;                           //
+  //ContentType          :=   {*empty* | application/x-www-form...    }  WebRequest.ContentType;                               // CONTENT_TYPE / Ecb.ContentType / *empty*
+  //ContentLength        :=   {0                                      }  WebRequest.ContentLength;                             // CONTENT_LENGTH / Ecb.TotalBytes
+  //ContentVersion       :=   {*empty*                                }  WebRequest.ContentVersion;                            //
+  //ContentRaw           :=   {*arrrayofbytes*                        }  WebRequest.RawContent;                                //
+  //Content              :=   {*keys-values in form*                  }  WebRequest.Content;                                   //
+    // server
+    ServerAddr           :=   {10.176.39.2                            }  WebRequest.GetFieldByName('LOCAL_ADDR');              //
+    ServerHost           :=   {localhost | www.abc.com                }  WebRequest.GetFieldByName('HTTP_HOST');               // WebRequest.Host
+  //ServerName           :=   {localhost                              }  WebRequest.GetFieldByName('SERVER_NAME');             //
+    ServerPort           :=   {80                                     }  WebRequest.GetFieldByName('SERVER_PORT').ToInteger;   // WebRequest.ServerPort
+    ServerPortSecure     :=   {80                                     }  WebRequest.GetFieldByName('SERVER_PORT_SECURE').ToInteger;
+  //ServerProtocol       :=   {HTTP/1.1                               }  WebRequest.GetFieldByName('SERVER_PROTOCOL');         //
+    ServerSoftware       :=   {Microsoft-IIS/10.0                     }  WebRequest.GetFieldByName('SERVER_SOFTWARE');         //
+    // serveriiswebsite
+  //WebsiteInstance      :=   {1                                      }  WebRequest.GetFieldByName('INSTANCE_ID');             //
+  //WebsitePath          :=   {/LM/W3SVC/1                            }  WebRequest.GetFieldByName('INSTANCE_META_PATH');      //
+  //WebsitePath          :=   {/LM/W3SVC/1/ROOT                       }  WebRequest.GetFieldByName('APPL_MD_PATH');            //
+    // serverscript
+  //ScriptGateway        :=   {CGI/1.1                                }  WebRequest.GetFieldByName('GATEWAY_INTERFACE');       // GATEWAY_INTERFACE
+  //ScriptPath           :=   {X:\$\X\Win32\Debug                     }  WebRequest.GetFieldByName('APPL_PHYSICAL_PATH');      //
+    ScriptName           :=   {/WksIsapiProject.dll                   }  WebRequest.ScriptName;                                // SCRIPT_NAME / WebRequest.InternalScriptName
+    ScriptVer            :=   {1.0.0.123                              }  byn.Ver;                                              //
+    // zzz
+  //Authorization        :=   {*empty*                                }  WebRequest.Authorization;                             //
+  //CacheControl         :=   {*empty* or no-cache                    }  WebRequest.CacheControl;                              // HTTP_CACHE_CONTROL
+  //Date                 :=   {1899-12-29                             }  DateTime(IvWebRequest.Date);                          //
+  //From                 :=   {*empty* / might conteins User          }  WebRequest.From;                                      //
+  //IfModifiedSince      :=   {1899-12-29                             }  DateTime(IvWebRequest.IfModifiedSince);               //
+  //DerivedFrom          :=   {*empty*                                }  WebRequest.DerivedFrom;                               //
+    // end
+    TimingMs             :=   {-1                                     }  -1;                                                   //
+    {$ENDREGION}
+
+  finally
+    FreeAndNil(x);
   end;
-  {$ENDREGION}
-
-  {$REGION 'RequestExtended'}
-  // client (server is the reference point so remote_addr is the client_addr)
-//ClientIp             :=   {10.176.85.121                          }  WebRequest.RemoteIp;                                  //
-  ClientAddr           :=   {10.176.85.121                          }  WebRequest.RemoteAddr;                                // REMOTE_ADDR
-  ClientHost           :=   {localhost                              }  WebRequest.RemoteHost;                                // REMOTE_HOST
-//ClientPort                {62682                                  }                                                        // REMOTE_PORT
-  ClientAccept         :=   {text/html,application/xml              }  WebRequest.Accept;                                    // HTTP_ACCEPT
-  ClientAcceptEncoding :=   {gzip, deflate                          }  WebRequest.GetFieldByName('HTTP_ACCEPT_ENCODING');    //
-  ClientAcceptLanguage :=   {en-US,en                               }  WebRequest.GetFieldByName('HTTP_ACCEPT_LANGUAGE');    //
-  ClientApp            :=   {Mozilla/5.0 Windows NT...              }  WebRequest.UserAgent;                                 // HTTP_USER_AGENT   / WksClient 1.0.0.1
-  ClientAppVersion     :=   {5.0 / 1.0.0.1                          }  '';                                                   // UseragentVer / ClientVersion
-  // clientfingerprint
-  ClientDoNotTrack     :=   {1                                      }  WebRequest.CookieFields.Values['CoDoNotTrack'];       // HTTP_DNT
-  ClientTimezoneOffset :=   {?                                      }  WebRequest.CookieFields.Values['CoTimezoneOffset'];   //
-  ClientLanguage       :=   {?                                      }  WebRequest.CookieFields.Values['CoLanguage'];         //
-  ClientPlatform       :=   {?                                      }  WebRequest.CookieFields.Values['CoPlatform'];         //
-  ClientOs             :=   {?                                      }  WebRequest.CookieFields.Values['CoOs'];               //
-  ClientCpuCores       :=   {?                                      }  WebRequest.CookieFields.Values['CoCpuCores'];         //
-  ClientScreen         :=   {?                                      }  WebRequest.CookieFields.Values['CoScreen'];           //
-  ClientAudio          :=   {?                                      }  WebRequest.CookieFields.Values['CoAudio'];            //
-  ClientVideo          :=   {?                                      }  WebRequest.CookieFields.Values['CoVideo'];            //
-  ClientLocalStorage   :=   {?                                      }  WebRequest.CookieFields.Values['CoLocalStorage'];     //
-  ClientSessionStorage :=   {?                                      }  WebRequest.CookieFields.Values['CoSessionStorage'];   //
-  ClientIndexedDb      :=   {?                                      }  WebRequest.CookieFields.Values['CoIndexedDb'];        //
-  ClientFingerprint    :=   {?                                      }  WebRequest.CookieFields.Values['CoFingerprint'];      //
-  // user
-  UserOrganization     :=   {Wks (fromurl/dba)                      }  IvDbaCls.ScalarFD('select top(1) FldOrganization from DbaOrganization.dbo.TblOrganization where FldState= ''Active'' and FldWww = ''' + WebRequest.Host + '''', 'Unknown', k);
-  UserDomain           :=   {?                                      }  WebRequest.CookieFields.Values['CoDomain'];           //
-  UserComputer         :=   {phobos                                 }  WebRequest.CookieFields.Values['CoComputer'];         //
-  Username             :=   {giarussi | 353992                      }  str.Coalesce([WebRequest.CookieFields.Values['CoUsername'], WebRequest.GetFieldByName('HTTP_SMUSER'), WebRequest.GetFieldByName('HTTP_SMMATRICOLA')]);
-//UserPassword         :=                                              WebRequest.CookieFields.Values['CoPassword'];         //
-//UserLogon            :=   {?                                      }  WebRequest.GetFieldByName('LOGON_USER');              //
-//UserRemote           :=   {?                                      }  WebRequest.GetFieldByName('REMOTE_USER');             //
-//UserRemoteUnmapped   :=   {/                                      }  WebRequest.GetFieldByName('UNMAPPED_REMOTE_USER');    //
-  // session
-  Session              :=   {?                                      }  WebRequest.CookieFields.Values['CoSession'];          // was initiated in WebModuleAfterDispatch AT THE END of previous request   *** WILL REPLACE USERNAME+PASSSWORD or FINGERPRINT***
-  Otp                  :=   {?                                      }  WebRequest.CookieFields.Values['CoOtp'];              //
-  // http
-  HttpOrigin           :=   {                                       }  WebRequest.GetFieldByName('HTTP_ORIGIN');             //
-  HttpProtocol         :=   {HTTP/1.1                               }  WebRequest.ProtocolVersion;                           // SERVER_PROTOCOL
-  HttpMethod           :=   {GET, POST                              }  WebRequest.Method;                                    // REQUEST_METHOD / WebRequest.MethodType / Ecb.Method
-  // request
-  RequestId            :=   {095EBA6CEcb.ConnId                     }  (WebRequest as TISAPIRequest).Ecb^.ConnId;            //
-  Connection           :=   {keep-alive                             }  WebRequest.Connection;                                // HTTP_CONNECTION
-  Host                 :=   {aiwymsapp.ai.lfoundry.com              }  WebRequest.Host;                                      // SERVER_NAME
-  Url                  :=   {/WksIsapiProject.dll *partial or empty*}  WebRequest.Url ;                                      //
-  PathInfo             :=   {/Info                                  }  WebRequest.PathInfo;                                  // PATH_INFO / Ecb.PathInfo
-//InternalPathInfo     :=   {/Info                                  }  WebRequest.InternalPathInfo;                          //
-//RawPathInfo          :=   {/Info                                  }  WebRequest.RawPathInfo;                               //
-//PathTranslated       :=   {X:\$\X\Win32\Debug\Info                }  WebRequest.PathTranslated;                            // PATH_TRANSLATED / Ecb.PathTranslated
-  Query                :=   {?CoId=381&CoXxx=2                      }  WebRequest.Query;                                     // QUERY_STRING / Ecb.Query / WebRequest.QueryFields.CommaText
-//Referer              :=   {http://abc.com/WksIsapi.dll/Run?CoId=12}  WebRequest.Referer;                                   // HTTP_REFERER / full url or generally *empty*
-//Title                :=   {*empty*                                }  WebRequest.Title;                                     //
-//Cookie               :=   {CoOtp=933073; CoDomain=LOCALHOST;      }  WebRequest.Cookie;                                    // HTTP_COOKIE
-//TotalBytes           :=   {0                                      }  WebRequest.ContentLength;                             // Ecb.TotalBytes
-//Expires              :=   {?                                      }  TDateTime(IvWebRequest.Expires);                      //
-//MimeType             :=   {?                                      }  '';                                                   //
-  // content
-//ContentEncoding      :=   {*empty*                                }  WebRequest.ContentEncoding;                           //
-//ContentType          :=   {*empty* | application/x-www-form...    }  WebRequest.ContentType;                               // CONTENT_TYPE / Ecb.ContentType / *empty*
-//ContentLength        :=   {0                                      }  WebRequest.ContentLength;                             // CONTENT_LENGTH / Ecb.TotalBytes
-//ContentVersion       :=   {*empty*                                }  WebRequest.ContentVersion;                            //
-//ContentRaw           :=   {*arrrayofbytes*                        }  WebRequest.RawContent;                                //
-//Content              :=   {*keys-values in form*                  }  WebRequest.Content;                                   //
-  // server
-  ServerAddr           :=   {10.176.39.2                            }  WebRequest.GetFieldByName('LOCAL_ADDR');              //
-  ServerHost           :=   {localhost | www.abc.com                }  WebRequest.GetFieldByName('HTTP_HOST');               // WebRequest.Host
-//ServerName           :=   {localhost                              }  WebRequest.GetFieldByName('SERVER_NAME');             //
-  ServerPort           :=   {80                                     }  WebRequest.GetFieldByName('SERVER_PORT').ToInteger;   // WebRequest.ServerPort
-  ServerPortSecure     :=   {80                                     }  WebRequest.GetFieldByName('SERVER_PORT_SECURE').ToInteger;
-//ServerProtocol       :=   {HTTP/1.1                               }  WebRequest.GetFieldByName('SERVER_PROTOCOL');         //
-  ServerSoftware       :=   {Microsoft-IIS/10.0                     }  WebRequest.GetFieldByName('SERVER_SOFTWARE');         //
-  // serveriiswebsite
-//WebsiteInstance      :=   {1                                      }  WebRequest.GetFieldByName('INSTANCE_ID');             //
-//WebsitePath          :=   {/LM/W3SVC/1                            }  WebRequest.GetFieldByName('INSTANCE_META_PATH');      //
-//WebsitePath          :=   {/LM/W3SVC/1/ROOT                       }  WebRequest.GetFieldByName('APPL_MD_PATH');            //
-  // serverscript
-//ScriptGateway        :=   {CGI/1.1                                }  WebRequest.GetFieldByName('GATEWAY_INTERFACE');       // GATEWAY_INTERFACE
-//ScriptPath           :=   {X:\$\X\Win32\Debug                     }  WebRequest.GetFieldByName('APPL_PHYSICAL_PATH');      //
-  ScriptName           :=   {/WksIsapiProject.dll                   }  WebRequest.ScriptName;                                // SCRIPT_NAME / WebRequest.InternalScriptName
-  ScriptVer            :=   {1.0.0.123                              }  byn.Ver;                                              //
-  // zzz
-//Authorization        :=   {*empty*                                }  WebRequest.Authorization;                             //
-//CacheControl         :=   {*empty* or no-cache                    }  WebRequest.CacheControl;                              // HTTP_CACHE_CONTROL
-//Date                 :=   {1899-12-29                             }  DateTime(IvWebRequest.Date);                          //
-//From                 :=   {*empty* / might conteins User          }  WebRequest.From;                                      //
-//IfModifiedSince      :=   {1899-12-29                             }  DateTime(IvWebRequest.IfModifiedSince);               //
-//DerivedFrom          :=   {*empty*                                }  WebRequest.DerivedFrom;                               //
-  // end
-  TimingMs             :=   {-1                                     }  -1;                                                   //
-  {$ENDREGION}
-
-  // note
-  // UserOrganization IS-THE-ONLY-SURE-INFO, Username IS-AVAILABLE-AFTER-SUCCESSFUL-LOGIN
 end;
 
-function TWreRec.DbaInsert(var IvDbaCls: TDbaCls; var IvFbk: string): boolean;
+function TWreRec.DbaInsert(var IvFbk: string): boolean;
 var
   q: string;
   z: integer;
+  x: TDbaCls;
 begin
-  // sql
-  q :=           'insert into DbaClient.dbo.TblRequest'
-  + sLineBreak + 'select'
-  + sLineBreak + '    ' + sql.Val(DateTime            )
-  // client
-//+ sLineBreak + '  , ' + sql.Val(ClientIp            ) {10.176.85.121                          }
-  + sLineBreak + '  , ' + sql.Val(ClientAddr          ) {10.176.85.121                          }
-  + sLineBreak + '  , ' + sql.Val(ClientHost          ) {www.wks.cloud      (THE-ONLY-SURE-INFO)}
-//+ sLineBreak + '  , ' + sql.Val(ClientPort          ) {62682                                  }
-  + sLineBreak + '  , ' + sql.Val(ClientAccept        ) {text/html,application/xml              }
-  + sLineBreak + '  , ' + sql.Val(ClientAcceptEncoding) {gzip, deflate                          }
-  + sLineBreak + '  , ' + sql.Val(ClientAcceptLanguage) {en-US,en                               }
-  + sLineBreak + '  , ' + sql.Val(ClientApp           ) {Mozilla/5.0 Windows NT...              }
-  + sLineBreak + '  , ' + sql.Val(ClientAppVersion    ) {5.0 / 1.0.0.1                          }
-  // clientfingerprint				      )
-  + sLineBreak + '  , ' + sql.Val(ClientDoNotTrack    ) {1                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientTimezoneOffset) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientLanguage      ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientPlatform      ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientOs            ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientCpuCores      ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientScreen        ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientAudio         ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientVideo         ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientLocalStorage  ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientSessionStorage) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientIndexedDb     ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(ClientFingerprint   ) {?                                      }
-  // user					      )
-  + sLineBreak + '  , ' + sql.Val(UserOrganization    ) {Wks (fromurl/dba)                      }
-  + sLineBreak + '  , ' + sql.Val(UserDomain          ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(UserComputer        ) {phobos                                 }
-  + sLineBreak + '  , ' + sql.Val(Username            ) {giarussi | 353992                      }
-//+ sLineBreak + '  , ' + sql.Val(UserPassword        )
-//+ sLineBreak + '  , ' + sql.Val(UserLogon           ) {?                                      }
-//+ sLineBreak + '  , ' + sql.Val(UserRemote          ) {?                                      }
-//+ sLineBreak + '  , ' + sql.Val(UserRemoteUnmapped  ) {/                                      }
-  // session					      )
-  + sLineBreak + '  , ' + sql.Val(Session             ) {?                                      }
-  + sLineBreak + '  , ' + sql.Val(Otp                 ) {?                                      }
-  // http					      )
-  + sLineBreak + '  , ' + sql.Val(HttpOrigin          ) {                                       }
-  + sLineBreak + '  , ' + sql.Val(HttpProtocol        ) {HTTP/1.1                               }
-  + sLineBreak + '  , ' + sql.Val(HttpMethod          ) {GET, POST                              }
-  // request					      )
-  + sLineBreak + '  , ' + sql.Val(RequestId           ) {095EBA6CEcb.ConnId                     }
-  + sLineBreak + '  , ' + sql.Val(Connection          ) {keep-alive                             }
-  + sLineBreak + '  , ' + sql.Val(Host                ) {aiwymsapp.ai.lfoundry.com              }
-  + sLineBreak + '  , ' + sql.Val(Url                 ) {/WksIsapiProject.dll *partial or empty*}
-  + sLineBreak + '  , ' + sql.Val(PathInfo            ) {/Info                                  }
-//+ sLineBreak + '  , ' + sql.Val(InternalPathInfo    ) {/Info                                  }
-//+ sLineBreak + '  , ' + sql.Val(RawPathInfo         ) {/Info                                  }
-//+ sLineBreak + '  , ' + sql.Val(PathTranslated      ) {X:\$\X\Win32\Debug\Info                }
-  + sLineBreak + '  , ' + sql.Val(Query               ) {?CoId=381&CoXxx=2                      }
-//+ sLineBreak + '  , ' + sql.Val(Referer             ) {http://abc.com/WksIsapi.dll/Run?CoId=12}
-//+ sLineBreak + '  , ' + sql.Val(Title               ) {*empty*                                }
-//+ sLineBreak + '  , ' + sql.Val(Cookie              ) {CoOtp=933073; CoDomain=LOCALHOST;      }
-//+ sLineBreak + '  , ' + sql.Val(TotalBytes          ) {0                                      }
-//+ sLineBreak + '  , ' + sql.Val(Expires             ) {?                                      }
-//+ sLineBreak + '  , ' + sql.Val(MimeType            ) {?                                      }
-  // content					      )
-//+ sLineBreak + '  , ' + sql.Val(ContentEncoding     ) {*empty*                                }
-//+ sLineBreak + '  , ' + sql.Val(ContentType         ) {*empty* | application/x-www-form...    }
-//+ sLineBreak + '  , ' + sql.Val(ContentLength       ) {0                                      }
-//+ sLineBreak + '  , ' + sql.Val(ContentVersion      ) {*empty*                                }
-//+ sLineBreak + '  , ' + sql.Val(ContentRaw          ) {*arrrayofbytes*                        }
-//+ sLineBreak + '  , ' + sql.Val(Content             ) {*keys-values in form*                  }
-  // server					      )
-  + sLineBreak + '  , ' + sql.Val(ServerAddr          ) {10.176.39.2                            }
-  + sLineBreak + '  , ' + sql.Val(ServerHost          ) {localhost | www.abc.com                }
-//+ sLineBreak + '  , ' + sql.Val(ServerName          ) {localhost                              }
-  + sLineBreak + '  , ' + sql.Val(ServerPort          ) {80                                     }
-  + sLineBreak + '  , ' + sql.Val(ServerPortSecure    ) {80                                     }
-//+ sLineBreak + '  , ' + sql.Val(ServerProtocol      ) {HTTP/1.1                               }
-  + sLineBreak + '  , ' + sql.Val(ServerSoftware      ) {Microsoft-IIS/10.0                     }
-  // serveriiswebsite				      )
-//+ sLineBreak + '  , ' + sql.Val(WebsiteInstance     ) {1                                      }
-//+ sLineBreak + '  , ' + sql.Val(WebsitePath         ) {/LM/W3SVC/1                            }
-//+ sLineBreak + '  , ' + sql.Val(WebsitePath         ) {/LM/W3SVC/1/ROOT                       }
-  // serverscript				      )
-//+ sLineBreak + '  , ' + sql.Val(ScriptGateway       ) {CGI/1.1                                }
-//+ sLineBreak + '  , ' + sql.Val(ScriptPath          ) {X:\$\X\Win32\Debug                     }
-  + sLineBreak + '  , ' + sql.Val(ScriptName          ) {/WksIsapiProject.dll                   }
-  + sLineBreak + '  , ' + sql.Val(ScriptVer           ) {1.0.0.123                              }
-  // zzz					      )
-//+ sLineBreak + '  , ' + sql.Val(Authorization       ) {*empty*                                }
-//+ sLineBreak + '  , ' + sql.Val(CacheControl        ) {*empty* or no-cache                    }
-//+ sLineBreak + '  , ' + sql.Val(Date                ) {1899-12-29                             }
-//+ sLineBreak + '  , ' + sql.Val(From                ) {*empty* / might conteins User          }
-//+ sLineBreak + '  , ' + sql.Val(IfModifiedSince     ) {1899-12-29                             }
-//+ sLineBreak + '  , ' + sql.Val(DerivedFrom         ) {*empty*                                }
-  // end					      )
-  + sLineBreak + '  , ' + sql.Val(TimingMs            ) {-1                                     }
-  ;
-  // insert
-  Result := IvDbaCls.ExecFD(q, z, IvFbk);
-  if not Result then
-    ods('TWreRec.DbaInsert', IvFbk);
+  x := TDbaCls.Create(FDManager);
+  try
+    // sql
+    q :=           'insert into DbaClient.dbo.TblRequest'
+    + sLineBreak + 'select'
+    + sLineBreak + '    ' + sql.Val(DateTime            )
+    // client
+  //+ sLineBreak + '  , ' + sql.Val(ClientIp            ) {10.176.85.121                          }
+    + sLineBreak + '  , ' + sql.Val(ClientAddr          ) {10.176.85.121                          }
+    + sLineBreak + '  , ' + sql.Val(ClientHost          ) {www.wks.cloud      (THE-ONLY-SURE-INFO)}
+  //+ sLineBreak + '  , ' + sql.Val(ClientPort          ) {62682                                  }
+    + sLineBreak + '  , ' + sql.Val(ClientAccept        ) {text/html,application/xml              }
+    + sLineBreak + '  , ' + sql.Val(ClientAcceptEncoding) {gzip, deflate                          }
+    + sLineBreak + '  , ' + sql.Val(ClientAcceptLanguage) {en-US,en                               }
+    + sLineBreak + '  , ' + sql.Val(ClientApp           ) {Mozilla/5.0 Windows NT...              }
+    + sLineBreak + '  , ' + sql.Val(ClientAppVersion    ) {5.0 / 1.0.0.1                          }
+    // clientfingerprint				      )
+    + sLineBreak + '  , ' + sql.Val(ClientDoNotTrack    ) {1                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientTimezoneOffset) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientLanguage      ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientPlatform      ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientOs            ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientCpuCores      ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientScreen        ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientAudio         ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientVideo         ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientLocalStorage  ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientSessionStorage) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientIndexedDb     ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(ClientFingerprint   ) {?                                      }
+    // user					      )
+    + sLineBreak + '  , ' + sql.Val(UserOrganization    ) {Wks (fromurl/dba)                      }
+    + sLineBreak + '  , ' + sql.Val(UserDomain          ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(UserComputer        ) {phobos                                 }
+    + sLineBreak + '  , ' + sql.Val(Username            ) {giarussi | 353992                      }
+  //+ sLineBreak + '  , ' + sql.Val(UserPassword        )
+  //+ sLineBreak + '  , ' + sql.Val(UserLogon           ) {?                                      }
+  //+ sLineBreak + '  , ' + sql.Val(UserRemote          ) {?                                      }
+  //+ sLineBreak + '  , ' + sql.Val(UserRemoteUnmapped  ) {/                                      }
+    // session					      )
+    + sLineBreak + '  , ' + sql.Val(Session             ) {?                                      }
+    + sLineBreak + '  , ' + sql.Val(Otp                 ) {?                                      }
+    // http					      )
+    + sLineBreak + '  , ' + sql.Val(HttpOrigin          ) {                                       }
+    + sLineBreak + '  , ' + sql.Val(HttpProtocol        ) {HTTP/1.1                               }
+    + sLineBreak + '  , ' + sql.Val(HttpMethod          ) {GET, POST                              }
+    // request					      )
+    + sLineBreak + '  , ' + sql.Val(RequestId           ) {095EBA6CEcb.ConnId                     }
+    + sLineBreak + '  , ' + sql.Val(Connection          ) {keep-alive                             }
+    + sLineBreak + '  , ' + sql.Val(Host                ) {aiwymsapp.ai.lfoundry.com              }
+    + sLineBreak + '  , ' + sql.Val(Url                 ) {/WksIsapiProject.dll *partial or empty*}
+    + sLineBreak + '  , ' + sql.Val(PathInfo            ) {/Info                                  }
+  //+ sLineBreak + '  , ' + sql.Val(InternalPathInfo    ) {/Info                                  }
+  //+ sLineBreak + '  , ' + sql.Val(RawPathInfo         ) {/Info                                  }
+  //+ sLineBreak + '  , ' + sql.Val(PathTranslated      ) {X:\$\X\Win32\Debug\Info                }
+    + sLineBreak + '  , ' + sql.Val(Query               ) {?CoId=381&CoXxx=2                      }
+  //+ sLineBreak + '  , ' + sql.Val(Referer             ) {http://abc.com/WksIsapi.dll/Run?CoId=12}
+  //+ sLineBreak + '  , ' + sql.Val(Title               ) {*empty*                                }
+  //+ sLineBreak + '  , ' + sql.Val(Cookie              ) {CoOtp=933073; CoDomain=LOCALHOST;      }
+  //+ sLineBreak + '  , ' + sql.Val(TotalBytes          ) {0                                      }
+  //+ sLineBreak + '  , ' + sql.Val(Expires             ) {?                                      }
+  //+ sLineBreak + '  , ' + sql.Val(MimeType            ) {?                                      }
+    // content					      )
+  //+ sLineBreak + '  , ' + sql.Val(ContentEncoding     ) {*empty*                                }
+  //+ sLineBreak + '  , ' + sql.Val(ContentType         ) {*empty* | application/x-www-form...    }
+  //+ sLineBreak + '  , ' + sql.Val(ContentLength       ) {0                                      }
+  //+ sLineBreak + '  , ' + sql.Val(ContentVersion      ) {*empty*                                }
+  //+ sLineBreak + '  , ' + sql.Val(ContentRaw          ) {*arrrayofbytes*                        }
+  //+ sLineBreak + '  , ' + sql.Val(Content             ) {*keys-values in form*                  }
+    // server					      )
+    + sLineBreak + '  , ' + sql.Val(ServerAddr          ) {10.176.39.2                            }
+    + sLineBreak + '  , ' + sql.Val(ServerHost          ) {localhost | www.abc.com                }
+  //+ sLineBreak + '  , ' + sql.Val(ServerName          ) {localhost                              }
+    + sLineBreak + '  , ' + sql.Val(ServerPort          ) {80                                     }
+    + sLineBreak + '  , ' + sql.Val(ServerPortSecure    ) {80                                     }
+  //+ sLineBreak + '  , ' + sql.Val(ServerProtocol      ) {HTTP/1.1                               }
+    + sLineBreak + '  , ' + sql.Val(ServerSoftware      ) {Microsoft-IIS/10.0                     }
+    // serveriiswebsite				      )
+  //+ sLineBreak + '  , ' + sql.Val(WebsiteInstance     ) {1                                      }
+  //+ sLineBreak + '  , ' + sql.Val(WebsitePath         ) {/LM/W3SVC/1                            }
+  //+ sLineBreak + '  , ' + sql.Val(WebsitePath         ) {/LM/W3SVC/1/ROOT                       }
+    // serverscript				      )
+  //+ sLineBreak + '  , ' + sql.Val(ScriptGateway       ) {CGI/1.1                                }
+  //+ sLineBreak + '  , ' + sql.Val(ScriptPath          ) {X:\$\X\Win32\Debug                     }
+    + sLineBreak + '  , ' + sql.Val(ScriptName          ) {/WksIsapiProject.dll                   }
+    + sLineBreak + '  , ' + sql.Val(ScriptVer           ) {1.0.0.123                              }
+    // zzz					      )
+  //+ sLineBreak + '  , ' + sql.Val(Authorization       ) {*empty*                                }
+  //+ sLineBreak + '  , ' + sql.Val(CacheControl        ) {*empty* or no-cache                    }
+  //+ sLineBreak + '  , ' + sql.Val(Date                ) {1899-12-29                             }
+  //+ sLineBreak + '  , ' + sql.Val(From                ) {*empty* / might conteins User          }
+  //+ sLineBreak + '  , ' + sql.Val(IfModifiedSince     ) {1899-12-29                             }
+  //+ sLineBreak + '  , ' + sql.Val(DerivedFrom         ) {*empty*                                }
+    // end					      )
+    + sLineBreak + '  , ' + sql.Val(TimingMs            ) {-1                                     }
+    ;
+    // insert
+    Result := x.ExecFD(q, z, IvFbk);
+    if not Result then
+      ods('TWREREC.DBAINSERT', IvFbk);
 
-  // fbk
-  IvFbk := Format('Web request %d saved into database', [RequestId]);
+    // fbk
+    IvFbk := Format('Web request %d saved into database', [RequestId]);
+  finally
+    FreeAndNil(x);
+  end;
 end;
 
 function TWreRec.DbaSelectInput(var IvTable, IvField, IvWhere, IvFbk: string): boolean;
@@ -17162,6 +17574,7 @@ end;
 {$ENDREGION}
 
 {$REGION 'TVstRec'}
+(*
 procedure TVstRec.GetImageIndex(IvVst: TBaseVirtualTree; Node: PVirtualNode; Kind: TVTImageKind; Column: TColumnIndex; var Ghosted: Boolean; var ImageIndex: TImageIndex);
 var
   r: PNodeItem; // q: TDTNodeItem;
@@ -17348,7 +17761,7 @@ begin
   {$ENDREGION}
 
 end;
-
+*)
 procedure TVstRec.GetNodeInfo(IvVst: TBaseVirtualTree; Node: PVirtualNode; var IvPath, IvCaption: string; var IvKey, IvLevel, IvChildCount: integer);
 var
   d: PNodeItem;
@@ -17524,141 +17937,15 @@ begin
 end;
 {$ENDREGION}
 
-{$REGION 'TSbuRec'}
-procedure TSbuRec.Add(IvString: string; IvNlPrefix: integer);
-var
-  i: integer;
-begin
-  for i := 1 to IvNlPrefix do
-    Text := Text + sLineBreak;
-  Text := Text + IvString;
-end;
-
-procedure TSbuRec.AiE(IvString, IvDefault: string; IvNlPrefix: integer);
-var
-  s: string;
-begin
-  s := IvString;
-  if iis.Nx(s) then
-    s := IvDefault;
-  Add(s, IvNlPrefix);
-end;
-
-procedure TSbuRec.Aif(IvString: string; IvTest: boolean; IvNlPrefix: integer);
-begin
-  if IvTest then
-    Add(IvString, IvNlPrefix);
-end;
-
-procedure TSbuRec.AiX(IvString: string; IvNlPrefix: integer);
-begin
-  if iis.Ex(IvString) then
-    Add(IvString, IvNlPrefix);
-end;
-
-procedure TSbuRec.Ann(IvString: string);
-begin
-  Text := Text + IvString;
-end;
-
-procedure TSbuRec.ATg(IvString, IvTag: string);
-begin
-  Fmt('<%s>%s</%s>', [IvTag, IvString, IvTag]);
-end;
-
-procedure TSbuRec.AXr(IvString, IvReturn: string; IvNlPrefix: integer);
-begin
-  if iis.Ex(IvString) then
-    Add(IvReturn, IvNlPrefix);
-end;
-
-procedure TSbuRec.Clear;
-begin
-  Text := '';
-end;
-
-procedure TSbuRec.Emp(IvNl: integer);
-var
-  i: integer;
-begin
-  for i := 1 to IvNl do
-    Text := Text + sLineBreak;
-end;
-
-procedure TSbuRec.Fie(IvFormat: string; IvVarRecVector: array of TVarRec; IvTest: string; IvNlPrefix: integer);
-begin
-  if iis.Ex(IvTest) then
-    Fmt(IvFormat, IvVarRecVector, IvNlPrefix);
-end;
-
-procedure TSbuRec.Fif(IvFormat: string; IvVarRecVector: array of TVarRec; IvTest: boolean; IvNlPrefix: integer);
-begin
-  if IvTest then
-    Fmt(IvFormat, IvVarRecVector, IvNlPrefix);
-end;
-
-procedure TSbuRec.FiX(IvFormat, IvIfExist: string; IvNlPrefix: integer);
-begin
-  if IvIfExist <> '' then
-    Add(Format(IvFormat, [IvIfExist]), IvNlPrefix);
-end;
-
-procedure TSbuRec.FiY(IvFormat, IvFormat2, IvIfExist: string; IvNlPrefix: integer);
-begin
-  if IvIfExist = '' then
-    Add(Format(IvFormat, ['']), IvNlPrefix)
-  else
-    Add(Format(IvFormat, [Format(IvFormat2, [IvIfExist])]), IvNlPrefix);
-end;
-
-procedure TSbuRec.Fmt(IvFormat: string; IvVarRecVector: array of TVarRec; IvNlPrefix: integer);
-begin
-  Add(Format(IvFormat, IvVarRecVector), IvNlPrefix);
-end;
-
-procedure TSbuRec.Iif(IvTest: boolean; IvTrueVal, IvFalseVal: string; IvNlPrefix: integer);
-begin
-  if IvTest then
-    Add(IvTrueVal, IvNlPrefix)
-  else
-    Add(IvFalseVal, IvNlPrefix);
-end;
-
-procedure TSbuRec.Rep(IvString, IvOut, IvIn: string; IvNlPrefix: integer);
-begin
-  Add(StringReplace(IvString, IvOut, IvIn, [rfReplaceAll, rfIgnoreCase]), IvNlPrefix);
-end;
-
-procedure TSbuRec.Swi(IvSwitchList, IvSwitch, IvString: string; IvNlPrefix: integer);
-begin
-  if IvSwitchList.Contains(IvSwitch) then
-    Add(IvString, IvNlPrefix);
-end;
-{
-procedure TSbuRec.AdS(IvString: string; NlPrefix: boolean);
-begin
-  Fmt(SUCCESS_STR_FMT, [IvString], NlPrefix);
-end;
-
-procedure TSbuRec.AdW(IvString: string; NlPrefix: boolean);
-begin
-  Fmt(WARNING_STR_FMT, [IvString], NlPrefix);
-end;
-
-procedure TSbuRec.AdE(IvE: Exception; NlPrefix: boolean);
-begin
-  Fmt(EXCEPTION_FORMAT, [IvE.Message], NlPrefix);
-end;
-}
-{$ENDREGION}
-
 initialization
 
 {$REGION 'Init'}
-ods('WKSALLUNIT INIT', '--== I N I T I A L I Z A T I O N ==--');
+  lmx := TCriticalSection.Create;
+  ods('WKSALLUNIT INIT', '--== I N I T I A L I Z A T I O N ==--');
+  ods('WKSALLUNIT INIT', 'TCriticalSection created');
 
-{$REGION 'Help'}
-{
+  {$REGION 'Help'}
+  {
   W A R N I N G
   =============
   THIS INITIALIZATION SECTION HAPPENS ONLY ONE TIME
@@ -17677,234 +17964,236 @@ ods('WKSALLUNIT INIT', '--== I N I T I A L I Z A T I O N ==--');
 
   A: that is not a good thing to do inside a DLL
      you should export public functions like TerminateExtension that is callod by IIS just before to unload the dll.
-}
-{$ENDREGION}
-
-{$REGION 'FormatSettings'}
-FormatSettings.DecimalSeparator  := '.';              // or numbers will be 12,123 with a comma instead of a period
-FormatSettings.ShortDateFormat   := 'MM/dd/yyyy';     // or mssql will fails
-FormatSettings.ShortTimeFormat   := 'HH:mm:ss AM/PM'; // or mssql will fails
-Application.UpdateFormatSettings := false;            // avoid windows to change back the format setting, to much size increase
-ods('WKSALLUNIT INIT', 'FormatSettings applied');
-{$ENDREGION}
-
-{$REGION 'Leaks'}
-{$WARN SYMBOL_PLATFORM OFF}
-ReportMemoryLeaksOnShutDown := IsDebuggerPresent();
-ods('WKSALLUNIT INIT', 'ReportMemoryLeaksOnShutDown');
-{$WARN SYMBOL_PLATFORM ON}
-{$ENDREGION}
-
-{$REGION 'reg'}
-//RegisterClasses([TIcon, TMetafile, TBitmap, TJPEGImage, TPngImage]); // you might register others if wished (foR blobtopicture)
-{$ENDREGION}
-
-{$REGION 'xml'}
-//Xml.Win.msxmldom.MSXMLDOMDocumentFactory.AddDOMProperty('ProhibitDTD', false);
-{$ENDREGION}
-
-{$REGION 'wa0'}
-wa0 := TStopwatch.StartNew;
-ods('WKSALLUNIT INIT', 'TStopwatch wa0 started');
-{$ENDREGION}
-
-{$REGION 'sys'}                                                                 (*
-// main
-bmp.GetFromRc(sys.LogoBmp, 'WKS_LOGO_BMP_RC');
-ods('WKSALLUNIT INIT COMMON SYSTEM LOGO', 'Assigned');
-
-// dirs
-if not DirectoryExists(sys.TEMPDIR) then CreateDir(sys.TEMPDIR);
-
-// smtp-out
-sys.Smtp.Host     := ini.StrGet('Smtp/Host'    , sys.SMTP_HOST    );
-sys.Smtp.Port     := ini.StrGet('Smtp/Port'    , sys.SMTP_PORT    );
-sys.Smtp.Username := ini.StrGet('Smtp/Username', sys.SMTP_USERNAME);
-sys.Smtp.Password := ini.StrGet('Smtp/Password', sys.SMTP_PASSWORD);
-ods('WKSALLUNIT INIT COMMON SYSTEM SMTP', 'Assigned');
-
-// pop3-in
-sys.Pop3.Host     := ini.StrGet('Pop3/Host'    , sys.POP3_HOST    );
-sys.Pop3.Port     := ini.StrGet('Pop3/Port'    , sys.POP3_PORT    );
-sys.Pop3.Username := ini.StrGet('Pop3/Username', sys.POP3_USERNAME);
-sys.Pop3.Password := ini.StrGet('Pop3/Password', sys.POP3_PASSWORD);
-ods('WKSALLUNIT INIT COMMON SYSTEM POP3', 'Assigned');
-
-ods('WKSALLUNIT INIT', 'TSysRec sys initialized');                   *)
-{$ENDREGION}
-
-{$REGION 'lic'}
-//ods('WKSALLUNIT INIT', 'TLicRec lic not implemented');
-{$ENDREGION}
-
-{$REGION 'log'}
-lgt := TLgtCls.Create(); // globalobject
-ods('WKSALLUNIT INIT', 'TThreadFileLog created');
-{$ENDREGION}
-
-{$REGION 'SERVER'}
-if byn.IsServer or byn.IsDemon then begin
-
-  {$REGION 'com'}
-//CoInitializeEx(nil, COINIT_MULTITHREADED); // use COINIT_APARTMENTTHREADED for opaR
-//ods('WKSALLUNIT INIT SERVER', 'COM initialized');
-  {$ENDREGION}
-
-  {$REGION 'dba'}
-  {
-    *** WARNING ***
-
-    IN SERVERS APP LIKE ISAPI OR SOAP THESE OBJECTS CAN BE USED ONLY AT SERVER-INSTANCE LEVEL
-    USE THEM IN WebModuleCreate/WebModuleDestroy EVENTS
-
-    IN EACH USER REQUEST SESSION USE LOCAL OBJECTS TO ACCESS DBS
-    CREATED THEM IN WebModuleBeforeDispatch AND IMMEDIATELY DESTROYED IN WebModuleAfterDispatch
-    THIS WAY EACH USER HAS IT OWN CONNECTION TO THE DB LIVING FOR A SHORT PERIOD OF TIME
-
-    THESE OBJETS CAN ALSO BE USED IN UTILITIES APPLICATIONS THAT DIRECTLY CAN SEE THE DB
   }
-
-//db0 := TDbaCls.Create(ini.StrGet('Database/Db0FDCs', ''));
-//ods('WKSALLUNIT INIT SERVER', 'TDbaCls db0 created (mssql)');
-
-//db1 := TDbaCls.Create(ini.StrGet('Database/Db1Cs', ''));
-//ods('WKSALLUNIT INIT SERVER', 'TMonCls db1 created (mongo)');
-
-//db2 := TDbaCls.Create(ini.StrGet('Database/Db2Cs', ''), 'Redis', '???Client');
-//ods('WKSALLUNIT INIT SERVER', 'TRedCls db2 created (redis)');
-
-//db3 := TDbaCls.Create(ini.StrGet('Database/Db3Cs', ''), 'Kafka', 'LogClient');
-//ods('WKSALLUNIT INIT SERVER', 'TKafCls db2 created (kafka)');
   {$ENDREGION}
 
-  {$REGION 'usr,mbr,org,smt,pop : nologin'}
-//ods('WKSALLUNIT INIT SERVER', 'User, member and organization data acquired after a user webrequest (domanin -> organization, login --> user/menber)');
+  {$REGION 'FormatSettings'}
+  FormatSettings.DecimalSeparator  := '.';              // or numbers will be 12,123 with a comma instead of a period
+  FormatSettings.ShortDateFormat   := 'MM/dd/yyyy';     // or mssql will fails
+  FormatSettings.ShortTimeFormat   := 'HH:mm:ss AM/PM'; // or mssql will fails
+  Application.UpdateFormatSettings := false;            // avoid windows to change back the format setting, to much size increase
+  ods('WKSALLUNIT INIT', 'FormatSettings applied');
   {$ENDREGION}
 
-end;
-{$ENDREGION}
-
-{$REGION 'CLIENT'}
-if byn.IsClient then begin
-
-  {$REGION 'ico'}
-  h00 := LoadIcon(HInstance, 'AAA_APPLICATION_ICON_INV_RC');
-  if h00 > 0 then begin
-    Application.Icon.Handle := h00; // assign main icon at runtime
-    ods('WKSALLUNIT INIT CLIENT', 'icon assigned');
-  end else
-    ods('WKSALLUNIT INIT CLIENT', 'Unable to assign icon');
+  {$REGION 'Leaks'}
+  {$WARN SYMBOL_PLATFORM OFF}
+  ReportMemoryLeaksOnShutDown := IsDebuggerPresent();
+  ods('WKSALLUNIT INIT', 'ReportMemoryLeaksOnShutDown');
+  {$WARN SYMBOL_PLATFORM ON}
   {$ENDREGION}
 
-  {$REGION 'hlp'}
-//Application.HelpFile := ChangeFileExt(Application.ExeName, 'Help.chm');
-//ods('WKSALLUNIT INIT CLIENT', 'Help file not implemented');
+  {$REGION 'reg'}
+  //RegisterClasses([TIcon, TMetafile, TBitmap, TJPEGImage, TPngImage]); // you might register others if wished (foR blobtopicture)
   {$ENDREGION}
 
-  {$REGION 'com'}
-//ods('WKSALLUNIT INIT CLIENT', 'COM not implemented');
+  {$REGION 'xml'}
+  //Xml.Win.msxmldom.MSXMLDOMDocumentFactory.AddDOMProperty('ProhibitDTD', false);
   {$ENDREGION}
 
-  {$REGION 'dba'}
-//ods('WKSALLUNIT INIT CLIENT', 'DbaCls not implemented');
+  {$REGION 'wa0'}
+  wa0 := TStopwatch.StartNew;
+  ods('WKSALLUNIT INIT', 'TStopwatch wa0 started');
   {$ENDREGION}
 
-  {$REGION 'net'}
-//if not net.InternetIsAvailable(fk) then begin
-//  ods('WKSALLUNIT INIT CLIENT', 'Internet is not available, exit');
-//  raise Exception.Create('Internet is not available, exit');
-  //Application.Terminate; // shut down in an orderly fashion
-  //System.Halt;           // initiates the abnormal termination of the program
-  //ExitProcess;           // exit as quickly as possible, executing the minimum amount of code along the way, it is the final step of Halt
-  //TerminateProcess;      // even more brutal
-  //Exit;
-//end;
+  {$REGION 'sys'}                                                                 (*
+  // main
+  bmp.GetFromRc(sys.LogoBmp, 'WKS_LOGO_BMP_RC');
+  ods('WKSALLUNIT INIT COMMON SYSTEM LOGO', 'Assigned');
+
+  // dirs
+  if not DirectoryExists(sys.TEMPDIR) then CreateDir(sys.TEMPDIR);
+
+  // smtp-out
+  sys.Smtp.Host     := ini.StrGet('Smtp/Host'    , sys.SMTP_HOST    );
+  sys.Smtp.Port     := ini.StrGet('Smtp/Port'    , sys.SMTP_PORT    );
+  sys.Smtp.Username := ini.StrGet('Smtp/Username', sys.SMTP_USERNAME);
+  sys.Smtp.Password := ini.StrGet('Smtp/Password', sys.SMTP_PASSWORD);
+  ods('WKSALLUNIT INIT COMMON SYSTEM SMTP', 'Assigned');
+
+  // pop3-in
+  sys.Pop3.Host     := ini.StrGet('Pop3/Host'    , sys.POP3_HOST    );
+  sys.Pop3.Port     := ini.StrGet('Pop3/Port'    , sys.POP3_PORT    );
+  sys.Pop3.Username := ini.StrGet('Pop3/Username', sys.POP3_USERNAME);
+  sys.Pop3.Password := ini.StrGet('Pop3/Password', sys.POP3_PASSWORD);
+  ods('WKSALLUNIT INIT COMMON SYSTEM POP3', 'Assigned');
+
+  ods('WKSALLUNIT INIT', 'TSysRec sys initialized');                   *)
   {$ENDREGION}
 
-  {$REGION 'usr,mbr,org,smt,pop : login'}
-//if not TLoginForm.Execute(fk) then begin // fk := 'Unable to login'; // loginandsessionopen
-//  raise Exception.Create(fk);
-  //Application.Terminate;
-//end;
-//ods('WKSALLUNIT INIT CLIENT', 'User, member and organization data acquired after a succesful login');
+  {$REGION 'lic'}
+  //ods('WKSALLUNIT INIT', 'TLicRec lic not implemented');
   {$ENDREGION}
 
-  {$REGION 'gui'}
-//syn.SynEditSearch      := TSynEditSearch.Create(nil);
-//syn.SynEditRegexSearch := TSynEditRegexSearch.Create(nil);
-//syg.SearchFromCaret    := true;
-//ods('WKSALLUNIT INIT CLIENT', 'gui stuff created (syneditsearch)');
+  {$REGION 'log'}
+  //lgt := TLgtCls.Create(); // globalobject
+  //ods('WKSALLUNIT INIT', 'TThreadFileLog created');
   {$ENDREGION}
 
-end;
-{$ENDREGION}
+  {$REGION 'SERVER'}
+  if byn.IsServer or byn.IsDemon then begin
+
+    {$REGION 'com'}
+  //CoInitializeEx(nil, COINIT_MULTITHREADED); // use COINIT_APARTMENTTHREADED for opaR
+  //ods('WKSALLUNIT INIT SERVER', 'COM initialized');
+    {$ENDREGION}
+
+    {$REGION 'dba'}
+    {
+      *** WARNING ***
+
+      IN SERVERS APP LIKE ISAPI OR SOAP THESE OBJECTS CAN BE USED ONLY AT SERVER-INSTANCE LEVEL
+      USE THEM IN WebModuleCreate/WebModuleDestroy EVENTS
+
+      IN EACH USER REQUEST SESSION USE LOCAL OBJECTS TO ACCESS DBS
+      CREATED THEM IN WebModuleBeforeDispatch AND IMMEDIATELY DESTROYED IN WebModuleAfterDispatch
+      THIS WAY EACH USER HAS IT OWN CONNECTION TO THE DB LIVING FOR A SHORT PERIOD OF TIME
+
+      THESE OBJETS CAN ALSO BE USED IN UTILITIES APPLICATIONS THAT DIRECTLY CAN SEE THE DB
+    }
+
+  //db0 := TDbaCls.Create(ini.StrGet('Database/Db0FDCs', ''));
+  //ods('WKSALLUNIT INIT SERVER', 'TDbaCls db0 created (mssql)');
+
+  //db1 := TDbaCls.Create(ini.StrGet('Database/Db1Cs', ''));
+  //ods('WKSALLUNIT INIT SERVER', 'TMonCls db1 created (mongo)');
+
+  //db2 := TDbaCls.Create(ini.StrGet('Database/Db2Cs', ''), 'Redis', '???Client');
+  //ods('WKSALLUNIT INIT SERVER', 'TRedCls db2 created (redis)');
+
+  //db3 := TDbaCls.Create(ini.StrGet('Database/Db3Cs', ''), 'Kafka', 'LogClient');
+  //ods('WKSALLUNIT INIT SERVER', 'TKafCls db2 created (kafka)');
+    {$ENDREGION}
+
+    {$REGION 'usr,mbr,org,smt,pop : nologin'}
+  //ods('WKSALLUNIT INIT SERVER', 'User, member and organization data acquired after a user webrequest (domanin -> organization, login --> user/menber)');
+    {$ENDREGION}
+
+  end;
+  {$ENDREGION}
+
+  {$REGION 'CLIENT'}
+  if byn.IsClient then begin
+
+    {$REGION 'ico'}
+    h00 := LoadIcon(HInstance, 'AAA_APPLICATION_ICON_INV_RC');
+    if h00 > 0 then begin
+      Application.Icon.Handle := h00; // assign main icon at runtime
+      ods('WKSALLUNIT INIT CLIENT', 'icon assigned');
+    end else
+      ods('WKSALLUNIT INIT CLIENT', 'Unable to assign icon');
+    {$ENDREGION}
+
+    {$REGION 'hlp'}
+  //Application.HelpFile := ChangeFileExt(Application.ExeName, 'Help.chm');
+  //ods('WKSALLUNIT INIT CLIENT', 'Help file not implemented');
+    {$ENDREGION}
+
+    {$REGION 'com'}
+  //ods('WKSALLUNIT INIT CLIENT', 'COM not implemented');
+    {$ENDREGION}
+
+    {$REGION 'dba'}
+  //ods('WKSALLUNIT INIT CLIENT', 'DbaCls not implemented');
+    {$ENDREGION}
+
+    {$REGION 'net'}
+  //if not net.InternetIsAvailable(fk) then begin
+  //  ods('WKSALLUNIT INIT CLIENT', 'Internet is not available, exit');
+  //  raise Exception.Create('Internet is not available, exit');
+    //Application.Terminate; // shut down in an orderly fashion
+    //System.Halt;           // initiates the abnormal termination of the program
+    //ExitProcess;           // exit as quickly as possible, executing the minimum amount of code along the way, it is the final step of Halt
+    //TerminateProcess;      // even more brutal
+    //Exit;
+  //end;
+    {$ENDREGION}
+
+    {$REGION 'usr,mbr,org,smt,pop : login'}
+  //if not TLoginForm.Execute(fk) then begin // fk := 'Unable to login'; // loginandsessionopen
+  //  raise Exception.Create(fk);
+    //Application.Terminate;
+  //end;
+  //ods('WKSALLUNIT INIT CLIENT', 'User, member and organization data acquired after a succesful login');
+    {$ENDREGION}
+
+    {$REGION 'gui'}
+  //syn.SynEditSearch      := TSynEditSearch.Create(nil);
+  //syn.SynEditRegexSearch := TSynEditRegexSearch.Create(nil);
+  //syg.SearchFromCaret    := true;
+  //ods('WKSALLUNIT INIT CLIENT', 'gui stuff created (syneditsearch)');
+    {$ENDREGION}
+
+  end;
+  {$ENDREGION}
 
 {$ENDREGION}
 
 finalization
 
 {$REGION 'Fine'}
-ods('WKSALLUNIT FINE', '--== F I N A L I Z A T I O N ==--');
+  ods('WKSALLUNIT FINE', '--== F I N A L I Z A T I O N ==--');
 
-{$REGION 'CLIENT'}
-if byn.IsClient then begin
+  {$REGION 'CLIENT'}
+  if byn.IsClient then begin
 
-  {$REGION 'gui'}
-//FreeAndNil(syn.SynEditSearch);
-//FreeAndNil(syn.SynEditRegexSearch);
-//ods('WKSALLUNIT FINE CLIENT', 'gui stuff free (syneditsearch)');
+    {$REGION 'gui'}
+  //FreeAndNil(syn.SynEditSearch);
+  //FreeAndNil(syn.SynEditRegexSearch);
+  //ods('WKSALLUNIT FINE CLIENT', 'gui stuff free (syneditsearch)');
+    {$ENDREGION}
+
+    {$REGION 'usr,mbr,org,smt,pop : logout'}
+  //FreeAndNil(org.LogoGraphic);
+  //ods('WKSALLUNIT FINE CLIENT', 'User, member and organization stuff free');
+
+    // sessionclose
+  //ses.RioClose(usr.Organization, usr.Username, fk);
+  //ods('WKSALLUNIT FINE CLIENT', 'User logout');
+    {$ENDREGION}
+
+  end;
   {$ENDREGION}
 
-  {$REGION 'usr,mbr,org,smt,pop : logout'}
-//FreeAndNil(org.LogoGraphic);
-//ods('WKSALLUNIT FINE CLIENT', 'User, member and organization stuff free');
+  {$REGION 'SERVER'}
+  if byn.IsServer or byn.IsDemon then begin
 
-  // sessionclose
-//ses.RioClose(usr.Organization, usr.Username, fk);
-//ods('WKSALLUNIT FINE CLIENT', 'User logout');
+    {$REGION 'usr,mbr,org,smt,pop : nologout'}
+  //usr.Avatar.Free;
+  //mbr.Badge.Free;
+  //org.LogoGraphic.Free;
+  //ods('WKSALLUNIT FINE SERVER', 'User, member and organization stuff free');
+    {$ENDREGION}
+
+    {$REGION 'dba'}
+  //db0.Free; // *** problems freeing the FConnFD ***
+  //ods('WKSALLUNIT FINE SERVER', 'TDbaCls db0 free (mssql)');
+    {$ENDREGION}
+
+    {$REGION 'com'}
+  //CoUninitialize; // non so se e' questo a causare il disaster !!!
+  //ods('WKSALLUNIT FINE SERVER', 'COM uninitialize');
+    {$ENDREGION}
+
+  end;
   {$ENDREGION}
 
-end;
-{$ENDREGION}
-
-{$REGION 'SERVER'}
-if byn.IsServer or byn.IsDemon then begin
-
-  {$REGION 'usr,mbr,org,smt,pop : nologout'}
-//usr.Avatar.Free;
-//mbr.Badge.Free;
-//org.LogoGraphic.Free;
-//ods('WKSALLUNIT FINE SERVER', 'User, member and organization stuff free');
+  {$REGION 'log'}
+  //lgt.Free; // cause the iis applicationpool to not recycle properly, do this in TerminateExtension place
+  //ods('WKSALLUNIT FINE', 'TThreadFileLog NOT free');
   {$ENDREGION}
 
-  {$REGION 'dba'}
-//db0.Free; // *** problems freeing the FConnFD ***
-//ods('WKSALLUNIT FINE SERVER', 'TDbaCls db0 free (mssql)');
+  {$REGION 'sys'}
+  //FreeAndNil(sys.LogoBmp);
+  //ods('WKSALLUNIT FINE', 'TSysCls logo bitmap free');
   {$ENDREGION}
 
-  {$REGION 'com'}
-//CoUninitialize; // non so se e' questo a causare il disaster !!!
-//ods('WKSALLUNIT FINE SERVER', 'COM uninitialize');
+  {$REGION 'wa0'}
+  ods('WKSALLUNIT FINE', 'TStopwatch total lifetime ' + wa0.ElapsedMilliseconds.ToString + ' ms');
   {$ENDREGION}
 
-end;
-{$ENDREGION}
-
-{$REGION 'log'}
-//lgt.Free; // cause the iis applicationpool to not recycle properly, do this in TerminateExtension place
-//ods('WKSALLUNIT FINE', 'TThreadFileLog NOT free here!');
-{$ENDREGION}
-
-{$REGION 'sys'}
-//FreeAndNil(sys.LogoBmp);
-//ods('WKSALLUNIT FINE', 'TSysCls logo bitmap free');
-{$ENDREGION}
-
-{$REGION 'wa0'}
-ods('WKSALLUNIT FINE', 'TStopwatch total lifetime ' + wa0.ElapsedMilliseconds.ToString + ' ms');
-{$ENDREGION}
-
-ods('WKSALLUNIT FINE', '--== E N D ==--');
+  ods('WKSALLUNIT FINE', 'TCriticalSection free');
+  ods('WKSALLUNIT FINE', '--== E N D ==--');
+  FreeAndNil(lmx);
 {$ENDREGION}
 
 {$REGION 'Zzz'}

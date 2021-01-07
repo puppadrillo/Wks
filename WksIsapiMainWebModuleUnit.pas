@@ -8,6 +8,7 @@ uses
   , System.Classes
   , System.Diagnostics
   , Web.HTTPApp
+  , FireDAC.Comp.Client //, FireDAC.Stan.Def, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Error, FireDAC.UI.Intf, FireDAC.Phys.Intf, FireDAC.Phys
   , WksAllUnit
   ;
 {$ENDREGION}
@@ -42,11 +43,9 @@ type
     procedure WebModule1DashboardWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
   private
     { Private declarations }
-    FCount: cardinal; // requestscounter
     FWat: TStopwatch;
     FIni: TIniCls;
-    FDba: TDbaCls;
-    function PathInfoActionIsValid(IvPathInfo: string): boolean;
+    FRun: cardinal;
   public
     { Public declarations }
   end;
@@ -66,84 +65,90 @@ implementation
 
 uses
     Winapi.Windows
-  , Data.DB
+  , Web.WebBroker
+  , Web.Win.ISAPIHTTP
+  , FireDAC.Comp.DataSet
   ;
-{$ENDREGION}
-
-{$REGION 'Routine'}
-function TWebModule1.PathInfoActionIsValid(IvPathInfo: string): boolean;
-var
-  i: integer;
-begin
-  for i := 0 to self.Actions.Count - 1 do begin
-    Result := Actions[i].PathInfo = IvPathInfo;
-    if Result then
-      Exit;
-  end;
-end;
 {$ENDREGION}
 
 {$REGION 'Events'}
 procedure TWebModule1.WebModuleCreate(Sender: TObject);
 begin
-  ods('WEBMODULE', 'Create');
+try
+  ods('WEBMODULE CREATE', 'Create');
 
-  {$REGION 'Objects'}
-  FIni := TIniCls.Create;      //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TIniCls object created');
-  FDba := TDbaCls.Create;      //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TDbaCls object created');
+  {$REGION 'WebModuleObjects'}
+  //ods('WEBMODULE CREATE', 'Nothing done');
+  FIni := TIniCls.Create;       ods('WEBMODULE CREATE', 'TIniCls created');
   {$ENDREGION}
 
+except
+  on e: Exception do ods('WEBMODULE CREATE', 'EXCEPTION: ' + e.Message);
+end;
 end;
 
 procedure TWebModule1.WebModuleDestroy(Sender: TObject);
 begin
-  ods('WEBMODULE', 'Destroy');
+try
+  ods('WEBMODULE DESTROY', 'Destroy');
 
-  {$REGION 'Objects'}
-  FDba.Free;                   //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TDbaCls object free');
-  FIni.Free;                   //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TIniCls object free');
+  {$REGION 'WebModuleObjects'}
+  //ods('WEBMODULE DESTROY', 'Nothing done');
+  FIni.Free;                    ods('WEBMODULE DESTROY', 'TIniCls free');
   {$ENDREGION}
 
+except
+  on e: Exception do ods('WEBMODULE DESTROY', 'EXCEPTION: ' + e.Message);
+end;
 end;
 
 procedure TWebModule1.WebModuleException(Sender: TObject; E: Exception; var Handled: Boolean);
 begin
   ods('WEBMODULE EXCEPTION', E.Message);
 
-  Response.Content := htm.PageE(FDba, 'Exception', e.Message);
+  Response.Content := e.Message;
 end;
 
 procedure TWebModule1.WebModuleBeforeDispatch(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var
   k: string;
 begin
-  Inc(FCount);
-  ods('WEBMODULE BEFOREDISPATCH', FCount.ToString);
+try
+  Inc(FRun);
 
-  {$REGION 'Objects'}
-  FWat := TStopwatch.StartNew; //lgt.Tag('WEBMODULE BEFOREDISPATCH', 'TStopwatch started');
+  ods('WEBMODULE BEFOREDISPATCH', FRun.ToString);
+
+  {$REGION 'RequestObjects'}
+  FWat := TStopwatch.StartNew;  ods('WEBMODULE BEFOREDISPATCH', 'TStopwatch started');
   {$ENDREGION}
 
-  {$REGION 'PrepareAll'}
-  all.BeforeDispatch(FDba, Request, Response, FIni.BooGet('WebRequest/OtpIsActive', false), FIni.BooGet('WebRequest/AuditIsActive', true), k);
+  {$REGION 'BeforeDispatch'}
+  all.BeforeDispatch(Request, Response, FIni.BooGet('WebRequest/OtpIsActive', false), FIni.BooGet('WebRequest/AuditIsActive', true), k);
   {$ENDREGION}
 
+except
+  on e: Exception do ods('WEBMODULE BEFOREDISPATCH', 'EXCEPTION: ' + e.Message);
+end;
 end;
 
 procedure TWebModule1.WebModuleAfterDispatch(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var
   k: string;
 begin
-  ods('WEBMODULE AFTERDISPATCH', FCount.ToString);
+try
+  ods('WEBMODULE AFTERDISPATCH', FRun.ToString);
 
-  {$REGION 'UnprepareAll'}
-  all.AfterDispatch(FDba, Request, Response, FIni.BooGet('WebRequest/OtpIsActive', false), FIni.BooGet('WebRequest/AuditIsActive', true), k);
+  {$REGION 'AfterDispatch'}
+  all.AfterDispatch(FWat, Request, Response, FIni.BooGet('WebRequest/OtpIsActive', false), FIni.BooGet('WebRequest/AuditIsActive', true), k);
   {$ENDREGION}
 
-  {$REGION 'Objects'}
-  FWat.Stop;                   //lgt.Tag('WEBMODULE AFTERDISPATCH', 'TStopwatch stopped');
+  {$REGION 'RequestObjects'}
+  FWat.Stop;                    ods('WEBMODULE AFTERDISPATCH', 'TStopwatch stopped (' + FWat.ElapsedMilliseconds.ToString + ' ms)');
   {$ENDREGION}
 
+except
+  on e: Exception do ods('WEBMODULE AFTERDISPATCH', 'EXCEPTION: ' + e.Message);
+end;
 end;
 {$ENDREGION}
 
@@ -151,45 +156,70 @@ end;
 procedure TWebModule1.WebModule1DefaultHandlerAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var
   o: boolean;
-  i: integer;
   h, k: string;
-  d: TDataset;
+  i: integer;
+  d: TFDDataSet;
+  x: TDbaCls;
 begin
-  ods('WEBMODULE DEFAULTHANDLER', FCount.ToString);
+try
+  ods('WEBMODULE DEFAULTHANDLER', FRun.ToString);
 
-  {$REGION 'Load'}
+  {$REGION 'Activity'}
   // simple
   if not true then begin
-    //i := rnd.Int(900, 1100);
+    i := 0; //rnd.Int(900, 1100);
     //Sleep(i);
-    h := Format('<p>run: %d, sleepping: %f seconds</p>', [FCount, i/1000]);
+    h := Format('sleepping: %f s', [i/1000]);
 
   // db
   end else begin
-    o := FDba.DsFD('select top(10) FldDateTime, FldClientApp, FldRequestId, FldHost, FldUrl, FldPathInfo, FldQuery from DbaClient.dbo.TblRequest order by FldDateTime desc', d, k);
+    x := TDbaCls.Create(FDManager);
     try
+      o := x.DsFD('select top(10) FldDateTime, FldClientApp, FldRequestId, FldHost, FldUrl, FldPathInfo, FldQuery from DbaClient.dbo.TblRequest order by FldDateTime desc', d, k);
       dst.ToHtml(d, h, true, true, true);
+      h := Format('%s', [k]) + ' ' + h;
     finally
-      d.Free;
+      FreeAndNil(d);
+      FreeAndNil(x);
     end;
-    h := Format('<p>run: %d: db: %s</p>', [FCount, k]) + h;
   end;
 
   // log
-  lgt.I(h);
+  ods('WEBMODULE DEFAULTHANDLER', h);
   {$ENDREGION}
 
   {$REGION 'Response'}
   Response.Content :=
-    '<html>'
-  + '<head><title>Web Server Application</title></head>'
-  + '<body>'
-  + 'Wks Isapi Web Server Application - ' + DateTimeToStr(Now())
-  + h
-  + '</body>'
-  + '</html>';
+                 '<html>'
+  + sLineBreak + '<head><title>Web Server Application</title></head>'
+  + sLineBreak + '<body>'
+  + sLineBreak + '<pre>'
+  + sLineBreak + 'Wks Test Isapi Web Server Application'
+  + sLineBreak + 'datetime            : ' + DateTimeToStr(Now)
+  + sLineBreak + 'pid                 : ' + Winapi.Windows.GetCurrentProcessId.ToString
+  + sLineBreak + 'tid                 : ' + Winapi.Windows.GetCurrentThreadID.ToString
+  + sLineBreak + 'webmodule           : ' + Format('%p', [@self])
+  + sLineBreak + 'requestconnid       : ' + (Request as TISAPIRequest).Ecb^.ConnId.ToString
+  + sLineBreak + 'maxconnections      : ' + Application.MaxConnections.ToString
+  + sLineBreak + 'activeconnections   : ' + Application.ActiveCount.ToString
+  + sLineBreak + 'inactiveconnections : ' + Application.InActiveCount.ToString
+  + sLineBreak + 'cachedconnections   : ' + Ord(Application.CacheConnections).ToString
+  + sLineBreak + 'run                 : ' + FRun.ToString
+  + sLineBreak + h
+  + sLineBreak + 'If you are getting this message your are providing a wrong PathInfo or the action is no more available'
+  + sLineBreak + '<pre>'
+  + sLineBreak + '</body>'
+  + sLineBreak + '</html>';
   {$ENDREGION}
 
+  Handled := true;
+
+except
+  on e: Exception do begin
+    Response.Content := 'WEBMODULE DEFAULTHANDLER EXCEPTION: ' + e.Message;
+    ods('WEBMODULE DEFAULTHANDLER', 'EXCEPTION: ' + e.Message);
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1InitWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
@@ -197,35 +227,39 @@ var
   t: string; // theme
   l: TStrings;
 begin
+try
+  ods('WEBMODULE INITWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
   // create all w3-theme.css files
-  css.W3ThemeInit(FDba, '#ffc107', 'amber');
-  css.W3ThemeInit(FDba, '#0f0f0f', 'black');
-  css.W3ThemeInit(FDba, '#2196f3', 'blue');
-  css.W3ThemeInit(FDba, '#607d8b', 'blue-grey');
-  css.W3ThemeInit(FDba, '#795548', 'brown');
-  css.W3ThemeInit(FDba, '#00bcd4', 'cyan');
-  css.W3ThemeInit(FDba, '#616161', 'dark-grey');
-  css.W3ThemeInit(FDba, '#ff5722', 'deep-orange');
-  css.W3ThemeInit(FDba, '#673ab7', 'deep-purple');
-  css.W3ThemeInit(FDba, '#4caf50', 'green');
-  css.W3ThemeInit(FDba, '#9e9e9e', 'grey');
-  css.W3ThemeInit(FDba, '#3f51b5', 'indigo');
-  css.W3ThemeInit(FDba, '#f0e68c', 'khaki');
-  css.W3ThemeInit(FDba, '#87ceeb', 'light-blue');
-  css.W3ThemeInit(FDba, '#8bc34a', 'light-green');
-  css.W3ThemeInit(FDba, '#e7e7e7', 'light-grey');
-  css.W3ThemeInit(FDba, '#cddc39', 'lime');
-  css.W3ThemeInit(FDba, '#ffa500', 'orange');
-  css.W3ThemeInit(FDba, '#e91e63', 'pink');
-  css.W3ThemeInit(FDba, '#9c27b0', 'purple');
-  css.W3ThemeInit(FDba, '#f44336', 'red');
-  css.W3ThemeInit(FDba, '#c0c0c0', 'silver');
-  css.W3ThemeInit(FDba, '#009688', 'teal');
-  css.W3ThemeInit(FDba, '#ffffff', 'white'); // f0f0f0
-  css.W3ThemeInit(FDba, '#ffeb3b', 'yellow');
+  css.W3ThemeInit('#ffc107', 'amber');
+  css.W3ThemeInit('#0f0f0f', 'black');
+  css.W3ThemeInit('#2196f3', 'blue');
+  css.W3ThemeInit('#607d8b', 'blue-grey');
+  css.W3ThemeInit('#795548', 'brown');
+  css.W3ThemeInit('#00bcd4', 'cyan');
+  css.W3ThemeInit('#616161', 'dark-grey');
+  css.W3ThemeInit('#ff5722', 'deep-orange');
+  css.W3ThemeInit('#673ab7', 'deep-purple');
+  css.W3ThemeInit('#4caf50', 'green');
+  css.W3ThemeInit('#9e9e9e', 'grey');
+  css.W3ThemeInit('#3f51b5', 'indigo');
+  css.W3ThemeInit('#f0e68c', 'khaki');
+  css.W3ThemeInit('#87ceeb', 'light-blue');
+  css.W3ThemeInit('#8bc34a', 'light-green');
+  css.W3ThemeInit('#e7e7e7', 'light-grey');
+  css.W3ThemeInit('#cddc39', 'lime');
+  css.W3ThemeInit('#ffa500', 'orange');
+  css.W3ThemeInit('#e91e63', 'pink');
+  css.W3ThemeInit('#9c27b0', 'purple');
+  css.W3ThemeInit('#f44336', 'red');
+  css.W3ThemeInit('#c0c0c0', 'silver');
+  css.W3ThemeInit('#009688', 'teal');
+  css.W3ThemeInit('#ffffff', 'white'); // f0f0f0
+  css.W3ThemeInit('#ffeb3b', 'yellow');
 
   // create Default.htm customized by organization
-  t := 'w3-theme-' + obj.DbaParamGet(FDba, 'System', 'Theme', 'grey') + '.css';
+  t := 'w3-theme-' + obj.DbaParamGet('System', 'Theme', 'grey') + '.css';
   l := TStringList.Create;
   try
     l.Add('<!DOCTYPE html>');
@@ -244,93 +278,125 @@ begin
     l.Add('  <div class="w3-waitloader"></div>');
     l.Add('</body>');
     l.Add('</html>');
-    l.SaveToFile(sys.HomePath(FDba) + '\Default.htm');
+    l.SaveToFile(sys.HomePath() + '\Default.htm');
   finally
-    l.Free;
+    FreeAndNil(l);
   end;
 
   // page
-  Response.Content := htm.PageBlank(FDba,
+  Response.Content := htm.PageBlank(
     'Init'
   , htm.AlertS('Initialize', Format('Customized %s and %s files have been created for %s', [htm.SpanCode('Default.htm'), htm.SpanCode(t), htm.SpanCode(org.Organization)]))
   );
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE ', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE INITWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1InfoWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var
   r, z, h, q, k: string; // reqformcharttable, reqlastN, reqhost, reqsql
-  d: TDataset;
+  d: TFDDataSet;
+  x: TDbaCls;
 begin
+try
+  ods('WEBMODULE INFOWEBACTION', FRun.ToString);
 
-  {$REGION 'PreWork'}
-  // requestforminputs
-  z := wre.StrGet('CoLast', '10');
-  h := wre.StrGet('CoHost', '%');
+  x := TDbaCls.Create(FDManager);
+  try
 
-  // requestsql
-  q :=           'select --top(' + z + ')'
-  + sLineBreak + '    FldDateTime, FldClientAddr, FldClientHost, FldClientFingerprint'
-  + sLineBreak + '  , FldUserOrganization, FldUsername'
-  + sLineBreak + '  , FldSession, FldOtp'
-  + sLineBreak + '  , FldRequestId, FldHttpProtocol, FldHttpMethod'
-  + sLineBreak + '  , FldHost, FldUrl, FldPathInfo, FldQuery'
-  + sLineBreak + '  , FldScriptVer, FldTimingMs '
-  + sLineBreak + 'from'
-  + sLineBreak + '    DbaClient.dbo.TblRequest ' // client_report_config.dbo.TblRequest
-  + sLineBreak + 'where'
-  + sLineBreak + '    FldHost like ''' + h + ''' '
-  + sLineBreak + 'order by'
-  + sLineBreak + '    1 '
-  + sLineBreak + 'offset'
-  + sLineBreak + '    (select count(*) from DbaClient.dbo.TblRequest) - ' + z + ' rows '
-  + sLineBreak + 'fetch'
-  + sLineBreak + '    next ' + z + ' rows only';
+    {$REGION 'Pre'}
+    // requestforminputs
+    z := wre.StrGet('CoLast', '10');
+    h := wre.StrGet('CoHost', '%');
 
-  // db
-  if not FDba.DsFD(q, d, k) then begin
-    r := htm.AlertW('Last Request', k);
-  end else begin
+    // requestsql
+    q :=           'select --top(' + z + ')'
+    + sLineBreak + '    FldDateTime, FldClientAddr, FldClientHost, FldClientFingerprint'
+    + sLineBreak + '  , FldUserOrganization, FldUsername'
+    + sLineBreak + '  , FldSession, FldOtp'
+    + sLineBreak + '  , FldRequestId, FldHttpProtocol, FldHttpMethod'
+    + sLineBreak + '  , FldHost, FldUrl, FldPathInfo, FldQuery'
+    + sLineBreak + '  , FldScriptVer, FldTimingMs '
+    + sLineBreak + 'from'
+    + sLineBreak + '    DbaClient.dbo.TblRequest ' // client_report_config.dbo.TblRequest
+    + sLineBreak + 'where'
+    + sLineBreak + '    FldHost like ''' + h + ''' '
+    + sLineBreak + 'order by'
+    + sLineBreak + '    1 '
+    + sLineBreak + 'offset'
+    + sLineBreak + '    (select count(*) from DbaClient.dbo.TblRequest) - ' + z + ' rows '
+    + sLineBreak + 'fetch'
+    + sLineBreak + '    next ' + z + ' rows only';
+
     // requestform
     r := ''
     + htm.H(3, 'Filters')
-    + htm.Form(['CoLast', 'CoHost', 'CoSubmit'], ['Text', 'Text', 'Submit'], [z, h, 'Refresh'], 'w3-container', '[RvWreScriptName]/Info', 'post')
+    + htm.Form(['CoLast', 'CoHost', 'CoSubmit'], ['Text', 'Text', 'Submit'], [z, h, 'Refresh'], 'w3-container', '[RvWreScriptName]/Info', 'post');
 
-    // requesttimechart
-    + htm.H(3, 'Chart')
-    + htm.ChartDs('CoTestChart', '100%' , '400px', 'Test Chart', d, 'FldDateTime', 'FldTimingMs', '')
+    // lastrequestsds
+    if not x.DsFD(q, d, k) then begin
+      r := r + htm.AlertW('Last Request', k);
+    end else begin
+      r := r
 
-    // requesttable
-    + htm.H(3, 'Table')
-    + htm.TableDs(d)
-  end;
+      // requesttimechart
+      + htm.H(3, 'Chart')
+      + htm.ChartDs('CoTestChart', '100%' , '400px', 'Test Chart', d, 'FldDateTime', 'FldTimingMs', '')
+
+      // requesttable
+      + htm.H(3, 'Table')
+      + htm.TableDs(d)
+    end;
   {$ENDREGION}
 
-  // page
-  Response.Content := htm.Page(FDba,
-    'Info'
+    {$REGION 'Go'}
+    Response.Content := htm.Page(
+      'Info'
 
-  // pathinfoactions
-  , htm.SpaceV()
-  + htm.H(2, 'Actions')
-  + htm.DivPathInfoActions(Request)
+    // pathinfoactions
+    , htm.SpaceV()
+    + htm.H(2, 'Actions')
+    + htm.DivPathInfoActions(self, Request)
 
-  // webrequest
-  + htm.SpaceV()
-  + htm.H(2, 'Web Request')
-  + htm.TableWre
+    // webrequest
+    + htm.SpaceV()
+    + htm.H(2, 'Web Request')
+    + htm.TableWre
 
-  // requests
-  + htm.SpaceV()
-  + htm.H(2, 'Last Requests')
-  + r
+    // requests
+    + htm.SpaceV()
+    + htm.H(2, 'Last Requests')
+    + r
 
-  + htm.SpaceV()
-  );
+    + htm.SpaceV()
+    );
+    {$ENDREGION}
+
+  finally
+    FreeAndNil(d);
+    FreeAndNil(x);
+  end;
+except
+  on e: Exception do begin
+    ods('WEBMODULE INFOWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE INFOWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1TestWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
-  Response.Content := htm.Page(FDba,
+try
+  ods('WEBMODULE TESTWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
+  Response.Content := htm.Page(
     'Test'
 
   // rv
@@ -360,75 +426,122 @@ begin
 
   + htm.SpaceV()
   );
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE TESTWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE TESTWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1PageWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var
   iop, q, k: string; // pageidorpath
   i: integer; // id
-  d: TDataset;
+  d: TFDDataSet;
+  x: TDbaCls;
 begin
-  // id
-  iop := wre.StrGet('CoId', '');
-  if iop.IsEmpty then
-    i := FDba.HIdFromPath('DbaPage.dbo.TblPage', 'FldPage', org.TreePath)
-  else
-    i := FDba.HIdFromIdOrPath('DbaPage.dbo.TblPage', 'FldPage', iop);
+try
+  ods('WEBMODULE PAGEWEBACTION', FRun.ToString);
 
-  // sql
-  q := 'select FldId, FldPage, FldTitle, FldSubTitle, FldContent, FldHead, FldCss, FldJs, FldHeader, FldFooter, FldContainerOn from DbaPage.dbo.TblPage where FldState = ''Active'' and FldId = ' + i.ToString;
+  x := TDbaCls.Create(FDManager);
+  try
 
-  // pagenotfound
-  if not FDba.DsFD(q, d, k, true) then
-    Response.Content := htm.PageNotFound(FDba)
+    {$REGION 'Go'}
+    // id
+    iop := wre.StrGet('CoId', '');
+    if iop.IsEmpty then
+      i := x.HIdFromPath('DbaPage.dbo.TblPage', 'FldPage', org.TreePath)
+    else
+      i := x.HIdFromIdOrPath('DbaPage.dbo.TblPage', 'FldPage', iop);
 
-  // pagenotactive
-  else if false then
-    Response.Content := htm.PageW(FDba, 'pagenotactive')
+    // sql
+    q := 'select FldId, FldPage, FldTitle, FldSubTitle, FldContent, FldHead, FldCss, FldJs, FldHeader, FldFooter, FldContainerOn from DbaPage.dbo.TblPage where FldState = ''Active'' and FldId = ' + i.ToString;
 
-  // pagerestrictedforprivileges
-  else if false then
-    Response.Content := htm.PageW(FDba, 'pagerestrictedforprivileges')
+    // pagenotfound
+    if not x.DsFD(q, d, k, true) then
+      Response.Content := htm.PageNotFound()
 
-  // pagebelongtodifferentorganization
-  else if false then
-    Response.Content := htm.PageW(FDba, 'pagebelongtodifferentorganization')
+    // pagenotactive
+    else if false then
+      Response.Content := htm.PageW('pagenotactive')
 
-  // pageserve
-  else
-    Response.Content := htm.Page(FDba,
-      // title
-      iif.NxD(d.FieldByName('FldTitle').AsString, d.FieldByName('FldPage').AsString)
-      // content
-    , iif.ExF(d.FieldByName('FldTitle').AsString, '<h2>%s</h2>')
-    + iif.ExF(d.FieldByName('FldSubTitle').AsString, '<h6>%s</h6><hr>')
-    +         d.FieldByName('FldContent').AsString
-      // head&css&js
-    , d.FieldByName('FldHead').AsString
-    , d.FieldByName('FldCss').AsString
-    , d.FieldByName('FldJs').AsString
-      // h&f
-    , d.FieldByName('FldHeader').AsString
-    , d.FieldByName('FldFooter').AsString
-      // others
-    , d.FieldByName('FldContainerOn').AsBoolean
-    );
+    // pagerestrictedforprivileges
+    else if false then
+      Response.Content := htm.PageW('pagerestrictedforprivileges')
+
+    // pagebelongtodifferentorganization
+    else if false then
+      Response.Content := htm.PageW('pagebelongtodifferentorganization')
+
+    // pageserve
+    else
+      Response.Content := htm.Page(
+        // title
+        iif.NxD(d.FieldByName('FldTitle').AsString, d.FieldByName('FldPage').AsString)
+        // content
+      , iif.ExF(d.FieldByName('FldTitle').AsString, '<h2>%s</h2>')
+      + iif.ExF(d.FieldByName('FldSubTitle').AsString, '<h6>%s</h6><hr>')
+      +         d.FieldByName('FldContent').AsString
+        // head&css&js
+      , d.FieldByName('FldHead').AsString
+      , d.FieldByName('FldCss').AsString
+      , d.FieldByName('FldJs').AsString
+        // h&f
+      , d.FieldByName('FldHeader').AsString
+      , d.FieldByName('FldFooter').AsString
+        // others
+      , d.FieldByName('FldContainerOn').AsBoolean
+      );
+    {$ENDREGION}
+
+  finally
+    FreeAndNil(d);
+    FreeAndNil(x);
+  end;
+except
+  on e: Exception do begin
+    ods('WEBMODULE PAGEWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE PAGEWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 {$ENDREGION}
 
 {$REGION 'Login'}
 procedure TWebModule1.WebModule1LoginWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
+var
+//d: TFDDataSet;
+  x: TDbaCls;
 begin
-  Response.Content := htm.PageBlank(FDba,
+try
+  ods('WEBMODULE LOGINWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
+  Response.Content := htm.PageBlank(
     'User Login'
   , htm.ModUserLogin
   );
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE LOGINWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE LOGINWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1LoginTryWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var
   s: integer;
 begin
+try
+  ods('WEBMODULE LOGINTRYWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
   // try to validate username // credential here, also assign rights/levels accesses
   if wre.StrGet('CoUsername', '') = 'giarussi' then begin
     // try to validate password
@@ -442,83 +555,200 @@ begin
       // redirecttodefault
       Response.SendRedirect(wre.ScriptName + '/');
     end else
-      Response.Content := htm.PageBlank(FDba, 'Password', htm.ModMessage('Incorrect Password', '<p>The password you have entered is not valid.</p><p>Please enter a valid password.</p><br>'));
+      Response.Content := htm.PageBlank('Password', htm.ModMessage('Incorrect Password', '<p>The password you have entered is not valid.</p><p>Please enter a valid password.</p><br>'));
     ;
   end else
-    Response.Content := htm.PageBlank(FDba, 'Username', htm.ModMessage('Unknown Username', '<p>The username you have entered is not valid.</p><p>Please create a new acoount or try to recover your forgotten username and/or password.</p><br>'));
+    Response.Content := htm.PageBlank('Username', htm.ModMessage('Unknown Username', '<p>The username you have entered is not valid.</p><p>Please create a new acoount or try to recover your forgotten username and/or password.</p><br>'));
   ;
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE LOGINTRYWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE LOGINTRYWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1LogoutWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var
   r: string; // redirect
 begin
+try
+  ods('WEBMODULE LOGOUTWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
   // removesessioncookiefromclient-fromnowonanewloginisnecessary
   wrs.CookieSet('CoSession', '');
 
   // redirect
-  r := obj.DbaParamGet(FDba, 'System', 'LogoutUrl', 'http://www.google.com');
+  r := obj.DbaParamGet('System', 'LogoutUrl', 'http://www.google.com');
   Response.SendRedirect(r);
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE LOGOUTWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE LOGOUTWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 {$ENDREGION}
 
 {$REGION 'Account'}
 procedure TWebModule1.WebModule1AccountWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
+try
+  ods('WEBMODULE ACCOUNTWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
   // [...] display the account here, the page have to be self-editing enabled
-  Response.Content := htm.PageI(FDba, 'Account', NOT_IMPLEMENTED_STR);
+  Response.Content := htm.PageI('Account', NOT_IMPLEMENTED_STR);
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE ACCOUNTWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE ACCOUNTWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1AccountCreateWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
-  Response.Content := htm.PageBlank(FDba,
+try
+  ods('WEBMODULE ACCOUNTCREATEWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
+  Response.Content := htm.PageBlank(
     'Account Create'
   , htm.ModUserAccountCreate
   );
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE ACCOUNTCREATEWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE ACCOUNTCREATEWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1AccountCreateTryWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
+var
+//d: TFDDataSet;
+  x: TDbaCls;
 begin
-  // [...] try to create account here
-  Response.SendRedirect(wre.ScriptName + '/AccountCreateDone');
+try
+  ods('WEBMODULE ACCOUNTCREATETRYWEBACTION', FRun.ToString);
+
+  x := TDbaCls.Create(FDManager);
+  try
+
+    {$REGION 'Go'}
+    // [...] try to create account here
+    Response.SendRedirect(wre.ScriptName + '/AccountCreateDone');
+    {$ENDREGION}
+
+  finally
+  //FreeAndNil(d);
+    FreeAndNil(x);
+  end;
+except
+  on e: Exception do begin
+    ods('WEBMODULE ACCOUNTCREATETRYWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE ACCOUNTCREATETRYWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1AccountCreateDoneWebActionAction( Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
-  Response.Content := htm.PageBlank(FDba,
+try
+  ods('WEBMODULE ACCOUNTCREATEDONEWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
+  Response.Content := htm.PageBlank(
     'Account Create Done'
   , htm.ModUserAccountCreateDone
   );
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE ACCOUNTCREATEDONEWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE ACCOUNTCREATEDONEWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1AccountRecoverWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
-  Response.Content := htm.PageBlank(FDba,
+try
+  ods('WEBMODULE ACCOUNTRECOVERWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
+  Response.Content := htm.PageBlank(
     'Account Recover'
   , htm.ModUserAccountRecover
   );
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE ACCOUNTRECOVERWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE ACCOUNTRECOVERWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1AccountRecoverTryWebActionAction( Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
+try
+  ods('WEBMODULE ACCOUNTRECOVERTRYWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
   // [...] try to recover user account here send info to the user
   Response.SendRedirect(wre.ScriptName + '/AccountRecoverDone');
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE ACCOUNTRECOVERTRYWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE ACCOUNTRECOVERTRYWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1AccountRecoverDoneWebActionAction( Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
-  Response.Content := htm.PageBlank(FDba,
+try
+  ods('WEBMODULE RECOVERDONEWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
+  Response.Content := htm.PageBlank(
     'Account Recovering Done'
   , htm.ModUserAccountRecoverDone
   );
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE RECOVERDONEWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE RECOVERDONEWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 {$ENDREGION}
 
 {$REGION 'Social'}
 procedure TWebModule1.WebModule1SocialWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
-  // user's social page
-  Response.Content := htm.Page(FDba,
+try
+  ods('WEBMODULE SOCIALWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
+  Response.Content := htm.Page(
     'Social'
 
   , htm.D(''
@@ -553,53 +783,93 @@ begin
     , 'w3-row', 'Grid'
     )
   );
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE SOCIALWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE SOCIALWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1MessageWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
-  Response.Content := htm.PageI(FDba, 'Message', NOT_IMPLEMENTED_STR);
+try
+  ods('WEBMODULE MESSAGEWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
+  Response.Content := htm.PageI('Message', NOT_IMPLEMENTED_STR);
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE MESSAGEWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE MESSAGEWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1NewsWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
-  Response.Content := htm.PageI(FDba, 'News', NOT_IMPLEMENTED_STR);
+try
+  ods('WEBMODULE NEWSWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
+  Response.Content := htm.PageI('News', NOT_IMPLEMENTED_STR);
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE NEWSWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE NEWSWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 
 procedure TWebModule1.WebModule1NotificationWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
-  Response.Content := htm.PageI(FDba, 'Notification', NOT_IMPLEMENTED_STR);
+try
+  ods('WEBMODULE NOTIFICATIONWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
+  Response.Content := htm.PageI('Notification', NOT_IMPLEMENTED_STR);
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE NOTIFICATIONWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE NOTIFICATIONWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 {$ENDREGION}
 
 {$REGION 'Dashboard'}
 procedure TWebModule1.WebModule1DashboardWebActionAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 begin
+try
+  ods('WEBMODULE DASHBOARDWEBACTION', FRun.ToString);
+
+  {$REGION 'Go'}
   // [...] display here a dashboard tailored for the user
   // the user might be able to subscribe for different dashboards he is interested in
   // a defaul dashoard should be also provided
   // eventually the used might setup the order of dashoboards to see
-  Response.Content := htm.PageI(FDba, 'Dashboard', NOT_IMPLEMENTED_STR);
+  Response.Content := htm.PageI('Dashboard', NOT_IMPLEMENTED_STR);
+  {$ENDREGION}
+
+except
+  on e: Exception do begin
+    ods('WEBMODULE DASHBOARDWEBACTION', 'EXCEPTION: ' + e.Message);
+    Response.Content := 'WEBMODULE DASHBOARDWEBACTION EXCEPTION: ' + e.Message;
+  end;
+end;
 end;
 {$ENDREGION}
 
 {$REGION 'Zzz'}
 (*
-procedure TWebModule1.WebModule1DefaultHandlerAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
-var
-  r: string; // redirect
-begin
-  r := sys.DbaParamGet('DefaultHandlerRedirectTo', '/');
-  r := rva.Rv(r);
-
-  if r.IsEmpty then
-    Response.Content := htm.HtmlPageNotFound
-
-  else if r.Equals('/') or r.Equals('/WksIsapiProject.dll') or r.Equals('/WksIsapiProject.dll/') then
-    Response.Content := htm.HtmlI('Default', Format('Wks Web Application Server - %s', [DateTimeToStr(Now)]))
-
-  else
-    Response.SendRedirect(r);
-end;
 *)
 {$ENDREGION}
 

@@ -9,9 +9,6 @@
         <Projects Include="WksTestIsapiProject.dproj">
             <Dependencies/>
         </Projects>
-        <Projects Include="WksTestCgiProject.dproj">
-            <Dependencies/>
-        </Projects>
         <Projects Include="WksWsstUtilProject.dproj">
             <Dependencies/>
         </Projects>
@@ -41,15 +38,6 @@
     <Target Name="WksTestIsapiProject:Make">
         <MSBuild Projects="WksTestIsapiProject.dproj" Targets="Make"/>
     </Target>
-    <Target Name="WksTestCgiProject">
-        <MSBuild Projects="WksTestCgiProject.dproj"/>
-    </Target>
-    <Target Name="WksTestCgiProject:Clean">
-        <MSBuild Projects="WksTestCgiProject.dproj" Targets="Clean"/>
-    </Target>
-    <Target Name="WksTestCgiProject:Make">
-        <MSBuild Projects="WksTestCgiProject.dproj" Targets="Make"/>
-    </Target>
     <Target Name="WksWsstUtilProject">
         <MSBuild Projects="WksWsstUtilProject.dproj"/>
     </Target>
@@ -60,13 +48,13 @@
         <MSBuild Projects="WksWsstUtilProject.dproj" Targets="Make"/>
     </Target>
     <Target Name="Build">
-        <CallTarget Targets="WksTestConsoleProject;WksTestIsapiProject;WksTestCgiProject;WksWsstUtilProject"/>
+        <CallTarget Targets="WksTestConsoleProject;WksTestIsapiProject;WksWsstUtilProject"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="WksTestConsoleProject:Clean;WksTestIsapiProject:Clean;WksTestCgiProject:Clean;WksWsstUtilProject:Clean"/>
+        <CallTarget Targets="WksTestConsoleProject:Clean;WksTestIsapiProject:Clean;WksWsstUtilProject:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="WksTestConsoleProject:Make;WksTestIsapiProject:Make;WksTestCgiProject:Make;WksWsstUtilProject:Make"/>
+        <CallTarget Targets="WksTestConsoleProject:Make;WksTestIsapiProject:Make;WksWsstUtilProject:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

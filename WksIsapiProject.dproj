@@ -95,7 +95,6 @@
         <DCCReference Include="WksAllUnit.pas"/>
         <DCCReference Include="WksIsapiMainWebModuleUnit.pas">
             <Form>WebModule1</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TWebModule</DesignClass>
         </DCCReference>
         <BuildConfiguration Include="Release">

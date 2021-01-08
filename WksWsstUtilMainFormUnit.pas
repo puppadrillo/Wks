@@ -426,8 +426,8 @@ begin
   WebsiteComboBox.Items.Add('http://wks.cloud');
   PortComboBox.Items.Add(':80');
   PortComboBox.Items.Add(':8080');
-  UrlComboBox.Items.Add('/WksIsapiProject.dll');
   UrlComboBox.Items.Add('/WksTestIsapiProject.dll');
+  UrlComboBox.Items.Add('/WksPageIsapiProject.dll');
   PathInfoComboBox.Items.Add('');
   PathInfoComboBox.Items.Add('/');
   PathInfoComboBox.Items.Add('/Default');

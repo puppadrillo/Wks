@@ -1,9 +1,9 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{4DEC2374-2B55-4CEC-9926-6AA24DEC3CB2}</ProjectGuid>
     </PropertyGroup>
     <ItemGroup>
-        <Projects Include="WksIsapiProject.dproj">
+        <Projects Include="WksPageIsapiProject.dproj">
             <Dependencies/>
         </Projects>
     </ItemGroup>
@@ -14,23 +14,23 @@
             <Default.Personality/>
         </BorlandProject>
     </ProjectExtensions>
-    <Target Name="WksIsapiProject">
-        <MSBuild Projects="WksIsapiProject.dproj"/>
+    <Target Name="WksPageIsapiProject">
+        <MSBuild Projects="WksPageIsapiProject.dproj"/>
     </Target>
-    <Target Name="WksIsapiProject:Clean">
-        <MSBuild Projects="WksIsapiProject.dproj" Targets="Clean"/>
+    <Target Name="WksPageIsapiProject:Clean">
+        <MSBuild Projects="WksPageIsapiProject.dproj" Targets="Clean"/>
     </Target>
-    <Target Name="WksIsapiProject:Make">
-        <MSBuild Projects="WksIsapiProject.dproj" Targets="Make"/>
+    <Target Name="WksPageIsapiProject:Make">
+        <MSBuild Projects="WksPageIsapiProject.dproj" Targets="Make"/>
     </Target>
     <Target Name="Build">
-        <CallTarget Targets="WksIsapiProject"/>
+        <CallTarget Targets="WksPageIsapiProject"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="WksIsapiProject:Clean"/>
+        <CallTarget Targets="WksPageIsapiProject:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="WksIsapiProject:Make"/>
+        <CallTarget Targets="WksPageIsapiProject:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

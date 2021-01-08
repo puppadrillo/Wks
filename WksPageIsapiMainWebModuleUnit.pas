@@ -1,4 +1,4 @@
-unit WksIsapiMainWebModuleUnit;
+unit WksPageIsapiMainWebModuleUnit;
 
 interface
 
@@ -267,7 +267,7 @@ try
     l.Add('<head>');
     l.Add('  <title>Default Page</title>');
     l.Add('  <meta charset="utf-8">');
-    l.Add('  <meta http-equiv="refresh" content="0; url=/WksIsapiProject.dll/">');
+    l.Add('  <meta http-equiv="refresh" content="0; url=/WksPageIsapiProject.dll/">');
     l.Add('  <link rel="icon" href="' + org.IconUrl + '" type="image/png">');
     l.Add('  <link rel="stylesheet" href="/Include/w3/w3.css" />');
     l.Add('  <link rel="stylesheet" href="/Include/w3/' + t + '.css" />');

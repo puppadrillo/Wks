@@ -1,4 +1,4 @@
-library WksIsapiProject;
+library WksPageIsapiProject;
 
 {$R 'Wks.res' 'Wks.rc'}
 
@@ -14,14 +14,12 @@ uses
   Web.Win.ISAPIThreadPool,
   FireDAC.Comp.Client, // fdmanager
   WksAllUnit in 'WksAllUnit.pas',
-  WksIsapiMainWebModuleUnit in 'WksIsapiMainWebModuleUnit.pas' {WebModule1: TWebModule};
+  WksPageIsapiMainWebModuleUnit in 'WksPageIsapiMainWebModuleUnit.pas' {WebModule1: TWebModule};
 
 {$R *.res}
 
 {$REGION 'Export'}
 function GetExtensionVersion(var Ver: THSE_VERSION_INFO): bool; stdcall;
-var
-  p: TStrings; // params
 begin
 
   {$REGION 'Help'}
@@ -39,19 +37,15 @@ begin
 
   ods('DLL GETEXTENSIONVERSION', 'Global resource create Begin');
   try
-    p := TStringList.Create;
     try
-      p.Add('Server=LOCALHOST');
-      p.Add('Database=DbaClient');
-      p.Add('User_Name=sa');
-      p.Add('Password=secret'); // Igi0Ade
-      p.Add('Pooled=True');
-      FDManager.AddConnectionDef(CONN_DEF_NAME_FD, 'Mssql', p);
+      FDManager.ConnectionDefFileName := pat.Head(byn.FileSpec, 3) + '\WksFDConnection_' + net.Host + '.ini'; // OutputDebugString(PWideChar(FDManager.ConnectionDefFileName));
+      FDManager.LoadConnectionDefFile;
       FDManager.Active := true;
-    finally
-      p.Free;
+    except
+      on e: Exception do
+        log('DLL GETEXTENSIONVERSION', 'EXCEPTION: ' + e.Message);
     end;
-    ods('DLL GETEXTENSIONVERSION', 'FDManager private pooled connection created');
+    ods('DLL GETEXTENSIONVERSION', 'FDManager private pooled connection created (' + FDManager.ConnectionDefFileName + ')');
   except
     on e: Exception do
       ods('DLL GETEXTENSIONVERSION', 'EXCEPTION: ' + e.Message);

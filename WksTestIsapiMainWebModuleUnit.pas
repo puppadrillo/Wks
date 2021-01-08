@@ -82,10 +82,6 @@ try
   {$REGION 'WebModuleObjects'}
   //ods('WEBMODULE CREATE', 'Nothing done');
   FIni := TIniCls.Create;       ods('WEBMODULE CREATE', 'TIniCls created');
-
-  //CreatePooledConnection;
-  //con.ConnPrivatePooledCreateInFDManagerFromIni;
-  //FDManager.Active := true;
   {$ENDREGION}
 
 except

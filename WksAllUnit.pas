@@ -4,8 +4,8 @@ unit WksAllUnit;
 // - remove : ACCOUNTS (mesrport1)
 // - remove : PASSWORDS (lf123,igi0ade)
 // - remove : REFERENCES
-// - remove : iarussigiovannigiarussiwkslfmicroengitech
-// - remove : rva.Rv( intermedi
+// - remove : iarussigiovannigiarussiwkslfmicroengitechyahoo
+// - remove : rva.Rv() intermedi
 
 interface
 
@@ -1429,11 +1429,11 @@ type
   TMbrRec = record // member
   public
     State        : string; // Active
-    Member       : string; // giarussi
+    Member       : string; // puppadrillo
     Organization : string; // Wks
     Role         : string; // Administrator, Member, Guest
     Level        : string; // Low, Normal, High
-    Email        : string; // giarussi@engitech.it
+    Email        : string; // puppadrillo@engitech.it
     Phone        : string; // 348/5904744
     Authorization: string; // jsonblock
     function  Info: string;
@@ -1568,7 +1568,7 @@ type
     function  Info: string;
     function  Domain : string; // WKS
     function  Host   : string; // PHOBOS
-    function  OsLogin: string; // giarussi
+    function  OsLogin: string; // puppadrillo
     function  IpLan  : string; // 192.168.0.1
     function  IpWan  : string; // 212.237.10.198
     function  IpLanFn(var IvIpLan, IvFbk: string): boolean; // 192.168.0.1
@@ -1836,10 +1836,13 @@ type
   TPatRec = record // pathfile
     function  Volume(IvFile: string): string;                      // C:\Path\Name.ext --> C:  *** WARNING: will not include the final \ ***
     function  Path(IvFile: string): string;                        // C:\Path\Name.ext --> C:\Path
+    function  Head(IvFile: string; IvElemCount: integer): string;  // IvElemCount = 2 --> C:\Path
+    function  Tail(IvFile: string; IvElemCount: integer): string;  // IvElemCount = 2 --> \Path\Name.ext
     function  NameDotExt(IvFile: string): string;                  // C:\Path\Name.ext --> Name.ext
     function  Name(IvFile: string): string;                        // C:\Path\Name.ext --> Name
-    function  Ext(IvFile: string): string;                         // C:\Path\Name.ext --> .ext
     function  NameChange(const IvFile, IvNameNew: string): string; // C:\Path\Name.ext --> C:\Path\Newname.ext
+    function  Ext(IvFile: string): string;                         // C:\Path\Name.ext --> .ext
+    function  ExtChange(const IvFile, IvExtNew: string): string;   // C:\Path\Name.ext --> C:\Path\Name.txt
     function  DelimiterEnsure(IvPath: string): string;             // C:\Path -> C:\Path\
     function  ExtHas(IvFile: string): boolean;                     // C:\Path\Name.ext -> true
     function  ExtEnsure(IvExt: string): string;                    // txt -> .txt
@@ -2963,13 +2966,13 @@ type
     RequestId           : cardinal;       {095EBA6CEcb.ConnId                     }
     Connection          : string;         {keep-alive                             }
     Host                : string;         {aiwymsapp.ai.lfoundry.com              }
-    Url                 : string;         {/WksIsapiProject.dll *partial or empty*}
+    Url                 : string;     {/WksPageIsapiProject.dll *partial or empty*}
     PathInfo            : string;         {/Info                                  }
   //InternalPathInfo    : string;         {/Info                                  }
   //RawPathInfo         : string;         {/Info                                  }
   //PathTranslated      : string;         {X:\$\X\Win32\Debug\Info                }
     Query               : string;         {?CoId=381&CoXxx=2                      }
-  //Referer             : string;         {http://abc.com/WksIsapi.dll/Run?CoId=12}
+  //Referer             : string;     {http://abc.com/WksPageIsapi.dll/Run?CoId=12}
   //Title               : string;         {*empty*                                }
   //Cookie              : string;         {CoOtp=933073; CoDomain=LOCALHOST;      }
   //TotalBytes          : integer;        {0                                      }
@@ -2997,7 +3000,7 @@ type
     // serverscript
   //ScriptGateway       : string;         {CGI/1.1                                }
   //ScriptPath          : string;         {X:\$\X\Win32\Debug                     }
-    ScriptName          : string;         {/WksIsapiProject.dll                   }
+    ScriptName          : string;         {/WksPageIsapiProject.dll               }
     ScriptVer           : string;         {1.0.0.123                              }
     // zzz
   //Authorization       : string;         {*empty*                                }
@@ -3025,8 +3028,8 @@ type
     function  Field(IvField: string; var IvValue: string ; IvDefault: string ; var IvFbk: string; IvFalseIfValueIsEmpty: boolean = true): boolean; overload;
     function  PathInfoActionIsValid(IvPathInfoAction: string): boolean; // verify if input is one of the defined action pathinfo /Xxx
     function  PathInfoQuery: string;    // /Page?CoId=3
-    function  PathInfoQueryUrl: string; // /WksIsapiProject.dll/Page?CoId=3
-    function  UrlFull: string;          // http://www.abc.com/WksIsapiProject.dll/Page?CoId=3
+    function  PathInfoQueryUrl: string; // /WksPageIsapiProject.dll/Page?CoId=3
+    function  UrlFull: string;          // http://www.abc.com/WksPageIsapiProject.dll/Page?CoId=3
   end;
 
   TWapRec = record // webapp
@@ -3122,6 +3125,7 @@ var
 {$ENDREGION}
 
 {$REGION 'Routines'}
+procedure log(IvTag: string; IvText: string = '');
 procedure ods(IvTag: string; IvText: string = '');
 {$ENDREGION}
 
@@ -3159,29 +3163,37 @@ uses
 {$ENDREGION}
 
 {$REGION 'Routines'}
-procedure ods(IvTag, IvText: string);
-//var
-//  f, e: string; // filename, entry
-//  w: TStreamWriter;
+procedure log(IvTag, IvText: string);
+var
+  f, e: string; // filename, entry
+  w: TStreamWriter;
 begin
-//  if IsDebuggerPresent {or not Assigned(lmx)} then begin
-//    e := byn.Name + ' : ' + IvTag + ' : ' + IvText;
-//    OutputDebugString(PWideChar(e));
+//if IsDebuggerPresent then begin
+    if not Assigned(lmx) then
+      ods(IvTag, IvText)
+    else begin
+      f := ChangeFileExt(byn.FileSpec, '_' + FormatDateTime('yyyy-mm', Now) + '.log');
+      e := Format('%s|%5d:%5d|%-32s|%s', [FormatDateTime('dd hh:nn:ss zzz', Now), GetCurrentProcessID, GetCurrentThreadID, IvTag, IvText]);
+      lmx.Enter;
+      w := TStreamWriter.Create(f, true, TEncoding.UTF8);
+      try
+        w.WriteLine(e);
+      finally
+        w.Free;
+        lmx.Leave;
+      end;
+    end;
+//end;
+end;
 
-    // globalLog.Add(s);
-//    if Assigned(lmx) then begin
-//      f := ChangeFileExt(byn.FileSpec, '_' + FormatDateTime('yyyy-mm', Now) + '.log');
-//      e:= Format('%s|%5d:%5d|%-32s|%s', [FormatDateTime('dd hh:nn:ss zzz', Now), GetCurrentProcessID, GetCurrentThreadID, IvTag, IvText]);
-//      lmx.Enter;
-//      w := TStreamWriter.Create(f, true, TEncoding.UTF8);
-//      try
-//        w.WriteLine(e);
-//      finally
-//        w.Free;
-//        lmx.Leave;
-//      end;
-//    end;
-//  end;
+procedure ods(IvTag, IvText: string);
+var
+  e: string; // entry
+begin
+  if IsDebuggerPresent then begin
+    e := byn.Name + ' : ' + IvTag + ' : ' + IvText;
+    OutputDebugString(PWideChar(e));
+  end;
 end;
 {$ENDREGION}
 
@@ -8115,7 +8127,7 @@ var
 begin
 //a := 'domBlockToggle(''CoSidebarLeft'')';
   a := 'w3SidebarLeftToggle(''CoMiddleBlock'', ''CoSidebarLeft'', ''200px'')';
-  b := wre.ScriptName; // /WksIsapiProject.dll
+  b := wre.ScriptName; // /WksPageIsapiProject.dll
   Result :=           sLineBreak + '<!-- Navbar -->'
                     + sLineBreak + '<div>' // class="w3-top"                            // w3-border-bottom w3-border-theme
                     + sLineBreak + ' <div class="w3-bar w3-theme-d1 w3-left-align w3-large">'
@@ -12415,6 +12427,11 @@ begin
   Result := LowerCase(ExtractFileExt(IvFile)); // .txt
 end;
 
+function TPatRec.ExtChange(const IvFile, IvExtNew: string): string;
+begin
+  Result := ChangeFileExt(IvFile, IvExtNew);
+end;
+
 function TPatRec.ExtEnsure(IvExt: string): string;
 begin
   if IvExt = '' then
@@ -12427,6 +12444,46 @@ end;
 function TPatRec.ExtHas(IvFile: string): boolean;
 begin
   Result := IvFile.Contains('.');
+end;
+
+function TPatRec.Head(IvFile: string; IvElemCount: integer): string;
+var
+  i, p, z: integer; // pos, founddelimiters
+begin
+  p := 0;
+  z := 0;
+  for i := 1 to Length(IvFile) do
+    if IvFile[i] = '\' then begin
+      Inc(z);
+      if z = IvElemCount then begin
+        p := i;
+        break;
+      end;
+    end;
+  if p = 0 then
+    raise Exception.Create('Original path is too short, unable to get enough head elements')
+  else
+    Result := System.Copy(IvFile, 1, p - 1);
+end;
+
+function TPatRec.Tail(IvFile: string; IvElemCount: integer): string;
+var
+  i, p, z: integer; // pos, founddelimiters
+begin
+  p := 0;
+  z := 0;
+  for i := Length(IvFile) downto 1 do
+    if IvFile[i] = '\' then begin
+      Inc(z);
+      if z = IvElemCount then begin
+        p := i;
+        break;
+      end;
+    end;
+  if p = 0 then
+    raise Exception.Create('Original path is too short, unable to get enough tail elements')
+  else
+    Result := System.Copy(IvFile, p, MaxInt);
 end;
 
 function TPatRec.Name(IvFile: string): string;
@@ -13445,7 +13502,7 @@ begin
       else if str.IsPath(a[0]) then
         Result := Format('%s/Page?CoId=%s', [wre.ScriptName, a[0]])  // [RvPageUrl(Root/Organization/W/Wks/Home)] / [RvPageUrl(/Home)]
       else
-        Result := Format('%s/%s'          , [wre.ScriptName, a[0]]); // handle explicit webactions like localhost/WksIsapiProject.dll/Info or /Login
+        Result := Format('%s/%s'          , [wre.ScriptName, a[0]]); // handle explicit webactions like localhost/WksPageIsapiProject.dll/Info or /Login
     {$ENDREGION}
 
     {$REGION 'FromDba'}
@@ -15318,7 +15375,7 @@ var
 begin
   // object
   if iis.Nx(IvObj)                then o := 'System'  // WksSystemIsapiProject.dll
-//else if str.Same(IvObj, 'Page') then o := ''        // WksIsapiProject.dll/Page?CoId=%d .. WksPageIsapiProject
+//else if str.Same(IvObj, 'Page') then o := ''        // WksPageIsapiProject.dll/Page?CoId=%d .. WksPageIsapiProject
   else                                 o := IvObj;
 
   // id
@@ -17107,13 +17164,13 @@ begin
     RequestId            :=   {095EBA6CEcb.ConnId                     }  (WebRequest as TISAPIRequest).Ecb^.ConnId;            //
     Connection           :=   {keep-alive                             }  WebRequest.Connection;                                // HTTP_CONNECTION
     Host                 :=   {aiwymsapp.ai.lfoundry.com              }  WebRequest.Host;                                      // SERVER_NAME
-    Url                  :=   {/WksIsapiProject.dll *partial or empty*}  WebRequest.Url ;                                      //
+    Url                  :={/WksPageIsapiProject.dll *partial or empty*} WebRequest.Url ;                                      //
     PathInfo             :=   {/Info                                  }  WebRequest.PathInfo;                                  // PATH_INFO / Ecb.PathInfo
   //InternalPathInfo     :=   {/Info                                  }  WebRequest.InternalPathInfo;                          //
   //RawPathInfo          :=   {/Info                                  }  WebRequest.RawPathInfo;                               //
   //PathTranslated       :=   {X:\$\X\Win32\Debug\Info                }  WebRequest.PathTranslated;                            // PATH_TRANSLATED / Ecb.PathTranslated
     Query                :=   {?CoId=381&CoXxx=2                      }  WebRequest.Query;                                     // QUERY_STRING / Ecb.Query / WebRequest.QueryFields.CommaText
-  //Referer              :=   {http://abc.com/WksIsapi.dll/Run?CoId=12}  WebRequest.Referer;                                   // HTTP_REFERER / full url or generally *empty*
+  //Referer              :={http://abc.com/WksPageIsapi.dll/Run?CoId=12} WebRequest.Referer;                                   // HTTP_REFERER / full url or generally *empty*
   //Title                :=   {*empty*                                }  WebRequest.Title;                                     //
   //Cookie               :=   {CoOtp=933073; CoDomain=LOCALHOST;      }  WebRequest.Cookie;                                    // HTTP_COOKIE
   //TotalBytes           :=   {0                                      }  WebRequest.ContentLength;                             // Ecb.TotalBytes
@@ -17141,7 +17198,7 @@ begin
     // serverscript
   //ScriptGateway        :=   {CGI/1.1                                }  WebRequest.GetFieldByName('GATEWAY_INTERFACE');       // GATEWAY_INTERFACE
   //ScriptPath           :=   {X:\$\X\Win32\Debug                     }  WebRequest.GetFieldByName('APPL_PHYSICAL_PATH');      //
-    ScriptName           :=   {/WksIsapiProject.dll                   }  WebRequest.ScriptName;                                // SCRIPT_NAME / WebRequest.InternalScriptName
+    ScriptName           :=   {/WksPageIsapiProject.dll               }  WebRequest.ScriptName;                                // SCRIPT_NAME / WebRequest.InternalScriptName
     ScriptVer            :=   {1.0.0.123                              }  byn.Ver;                                              //
     // zzz
   //Authorization        :=   {*empty*                                }  WebRequest.Authorization;                             //
@@ -17215,13 +17272,13 @@ begin
     + sLineBreak + '  , ' + sql.Val(RequestId           ) {095EBA6CEcb.ConnId                     }
     + sLineBreak + '  , ' + sql.Val(Connection          ) {keep-alive                             }
     + sLineBreak + '  , ' + sql.Val(Host                ) {aiwymsapp.ai.lfoundry.com              }
-    + sLineBreak + '  , ' + sql.Val(Url                 ) {/WksIsapiProject.dll *partial or empty*}
+    + sLineBreak + '  , ' + sql.Val(Url                 ) {/WksPageIsapiProject.dll *partial or empty*}
     + sLineBreak + '  , ' + sql.Val(PathInfo            ) {/Info                                  }
   //+ sLineBreak + '  , ' + sql.Val(InternalPathInfo    ) {/Info                                  }
   //+ sLineBreak + '  , ' + sql.Val(RawPathInfo         ) {/Info                                  }
   //+ sLineBreak + '  , ' + sql.Val(PathTranslated      ) {X:\$\X\Win32\Debug\Info                }
     + sLineBreak + '  , ' + sql.Val(Query               ) {?CoId=381&CoXxx=2                      }
-  //+ sLineBreak + '  , ' + sql.Val(Referer             ) {http://abc.com/WksIsapi.dll/Run?CoId=12}
+  //+ sLineBreak + '  , ' + sql.Val(Referer             ) {http://abc.com/WksPageIsapi.dll/Run?CoId=12}
   //+ sLineBreak + '  , ' + sql.Val(Title               ) {*empty*                                }
   //+ sLineBreak + '  , ' + sql.Val(Cookie              ) {CoOtp=933073; CoDomain=LOCALHOST;      }
   //+ sLineBreak + '  , ' + sql.Val(TotalBytes          ) {0                                      }
@@ -17249,7 +17306,7 @@ begin
     // serverscript				      )
   //+ sLineBreak + '  , ' + sql.Val(ScriptGateway       ) {CGI/1.1                                }
   //+ sLineBreak + '  , ' + sql.Val(ScriptPath          ) {X:\$\X\Win32\Debug                     }
-    + sLineBreak + '  , ' + sql.Val(ScriptName          ) {/WksIsapiProject.dll                   }
+    + sLineBreak + '  , ' + sql.Val(ScriptName          ) {/WksPageIsapiProject.dll               }
     + sLineBreak + '  , ' + sql.Val(ScriptVer           ) {1.0.0.123                              }
     // zzz					      )
   //+ sLineBreak + '  , ' + sql.Val(Authorization       ) {*empty*                                }

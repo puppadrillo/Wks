@@ -20,8 +20,6 @@ uses
 
 {$REGION 'Export'}
 function GetExtensionVersion(var Ver: THSE_VERSION_INFO): bool; stdcall;
-var
-  p: TStrings; // params
 begin
 
   {$REGION 'Help'}
@@ -39,19 +37,15 @@ begin
 
   ods('DLL GETEXTENSIONVERSION', 'Global resource create Begin');
   try
-    p := TStringList.Create;
     try
-      p.Add('Server=LOCALHOST');
-      p.Add('Database=DbaClient');
-      p.Add('User_Name=sa');
-      p.Add('Password=secret'); // Igi0Ade
-      p.Add('Pooled=True');
-      FDManager.AddConnectionDef(CONN_DEF_NAME_FD, 'Mssql', p);
+      FDManager.ConnectionDefFileName := pat.Head(byn.FileSpec, 3) + '\WksFDConnection_' + net.Host + '.ini'; // OutputDebugString(PWideChar(FDManager.ConnectionDefFileName));
+      FDManager.LoadConnectionDefFile;
       FDManager.Active := true;
-    finally
-      p.Free;
+    except
+      on e: Exception do
+        log('DLL GETEXTENSIONVERSION', 'EXCEPTION: ' + e.Message);
     end;
-    ods('DLL GETEXTENSIONVERSION', 'FDManager private pooled connection created');
+    ods('DLL GETEXTENSIONVERSION', 'FDManager private pooled connection created (' + FDManager.ConnectionDefFileName + ')');
   except
     on e: Exception do
       ods('DLL GETEXTENSIONVERSION', 'EXCEPTION: ' + e.Message);
@@ -91,7 +85,7 @@ exports
 begin
   ReportMemoryLeaksOnShutdown := true;
   CoInitFlags := COINIT_MULTITHREADED;
-//IsMultiThread := true; // already present in ...
+  IsMultiThread := true; // already present in ...
 //TISAPIApplication(Application).OnTerminate := TerminateLast; // very last finalize
 //Application.MaxConnections := 5; // connectionsactivemax 32 by default
   NumberOfThreads := Application.MaxConnections;
